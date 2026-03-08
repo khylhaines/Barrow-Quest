@@ -2,24 +2,11 @@
 import { PINS } from "./pins.js";
 import { getQA } from "./qa.js";
 
-/**
- * Barrow Quest Engine
- * - GPS proximity trigger
- * - No AR gate before missions
- * - No AI verify
- * - Mode selection
- * - Manual reward assignment for all modes
- * - Stable option button wiring
- * - Experience filter support (Park / Docks / Full Barrow)
- */
-
-// ===== CONFIG =====
 const ENTER_RADIUS_M_DEFAULT = 30;
 const PASS_BONUS_COINS = 10;
 const CAPTURE_BONUS_COINS = 50;
 
-// ===== STATE =====
-let state = JSON.parse(localStorage.getItem("bq_master_v4")) || {
+let state = JSON.parse(localStorage.getItem("bq_master_v7")) || {
   k: 0,
   p: 0,
   khyl: 0,
@@ -31,47 +18,37 @@ let state = JSON.parse(localStorage.getItem("bq_master_v4")) || {
   hpP: false,
   nodes: {},
   rules: { cooldownMin: 10, captureNeed: 3 },
-  currentExperience: "park",
+  currentExperience: "full",
+  settings: {
+    voiceRate: 1,
+    sfxVol: 80,
+    enterRadiusM: 30,
+    character: "hero_duo",
+    zoomUI: false,
+  },
+  session: {
+    qaSalt: Date.now(),
+    missionsCompleted: 0,
+    rank: 1,
+  },
 };
 
-state.k = state.k ?? 0;
-state.p = state.p ?? 0;
-state.khyl = state.khyl ?? 0;
-state.activeParticipant = state.activeParticipant || "both";
-state.pendingCaptureReward = state.pendingCaptureReward ?? 0;
-state.rules = state.rules || { cooldownMin: 10, captureNeed: 3 };
 state.nodes = state.nodes || {};
-state.currentExperience = state.currentExperience || "park";
-
+state.rules = state.rules || { cooldownMin: 10, captureNeed: 3 };
+state.settings = state.settings || {};
 state.session = state.session || {};
+state.settings.voiceRate = state.settings.voiceRate ?? 1;
+state.settings.sfxVol = state.settings.sfxVol ?? 80;
+state.settings.enterRadiusM =
+  state.settings.enterRadiusM ?? ENTER_RADIUS_M_DEFAULT;
+state.settings.character = state.settings.character ?? "hero_duo";
+state.settings.zoomUI = state.settings.zoomUI ?? false;
 state.session.qaSalt = state.session.qaSalt ?? Date.now();
 state.session.missionsCompleted = state.session.missionsCompleted ?? 0;
 state.session.rank = state.session.rank ?? 1;
 
-state.settings = state.settings || {};
-state.settings = {
-  voiceRate: state.settings.voiceRate ?? 1.0,
-  sfxVol: state.settings.sfxVol ?? 80,
-  enterRadiusM: state.settings.enterRadiusM ?? ENTER_RADIUS_M_DEFAULT,
-  character: state.settings.character ?? "hero_duo",
-  zoomUI: state.settings.zoomUI ?? false,
-};
-
-// ===== DOM =====
 const $ = (id) => document.getElementById(id);
 
-// ===== RULE GETTERS =====
-const getCaptureNeed = () => state.rules?.captureNeed ?? 3;
-
-const getEnterRadiusM = () => {
-  const v = parseInt(
-    state.settings?.enterRadiusM ?? ENTER_RADIUS_M_DEFAULT,
-    10
-  );
-  return Number.isFinite(v) ? v : ENTER_RADIUS_M_DEFAULT;
-};
-
-// ===== RANK SYSTEM =====
 const RANK_TABLE = [
   { rank: 1, missions: 0 },
   { rank: 2, missions: 10 },
@@ -80,67 +57,79 @@ const RANK_TABLE = [
   { rank: 5, missions: 100 },
 ];
 
-function updateRank() {
-  let nextRank = 1;
-  for (const row of RANK_TABLE) {
-    if ((state.session.missionsCompleted ?? 0) >= row.missions) {
-      nextRank = row.rank;
-    }
-  }
-  state.session.rank = nextRank;
-  save();
-}
-
-function completeMissionProgress() {
-  state.session.missionsCompleted = (state.session.missionsCompleted ?? 0) + 1;
-  updateRank();
-  save();
-}
-
-function getRank() {
-  return state.session.rank ?? 1;
-}
-
-// ===== Character system =====
 const CHARACTERS = {
   hero_duo: {
     label: "Hero Duo",
-    iconHtml: `<div style="font-size:42px">🧭</div>`,
-    pointsMult: 1.0,
-    healthMult: 1.0,
+    iconHtml: `
+      <div style="
+        width:48px;height:48px;border-radius:50%;
+        background:radial-gradient(circle at 35% 30%, #fff7a8, #f1c40f 45%, #9a6f00 100%);
+        border:3px solid #fff3b0;
+        box-shadow:0 0 18px rgba(241,196,15,.75);
+        display:flex;align-items:center;justify-content:center;
+        font-size:24px;line-height:1;
+      ">🧭</div>`,
+    pointsMult: 1,
+    healthMult: 1,
   },
   ninja: {
     label: "Ninja Scout",
-    iconHtml: `<div style="font-size:42px">🥷</div>`,
+    iconHtml: `
+      <div style="
+        width:48px;height:48px;border-radius:50%;
+        background:radial-gradient(circle at 35% 30%, #d8e6ff, #4ea3ff 50%, #173b6e 100%);
+        border:3px solid #cfe1ff;
+        box-shadow:0 0 18px rgba(78,163,255,.75);
+        display:flex;align-items:center;justify-content:center;
+        font-size:24px;line-height:1;
+      ">🥷</div>`,
     pointsMult: 1.1,
     healthMult: 0.9,
   },
   wizard: {
     label: "Wizard Guide",
-    iconHtml: `<div style="font-size:42px">🧙‍♂️</div>`,
-    pointsMult: 1.0,
-    healthMult: 1.0,
+    iconHtml: `
+      <div style="
+        width:48px;height:48px;border-radius:50%;
+        background:radial-gradient(circle at 35% 30%, #efe1ff, #9b59b6 50%, #4b245d 100%);
+        border:3px solid #f0d9ff;
+        box-shadow:0 0 18px rgba(155,89,182,.75);
+        display:flex;align-items:center;justify-content:center;
+        font-size:24px;line-height:1;
+      ">🧙</div>`,
+    pointsMult: 1,
+    healthMult: 1,
   },
   robot: {
     label: "Robo Ranger",
-    iconHtml: `<div style="font-size:42px">🤖</div>`,
+    iconHtml: `
+      <div style="
+        width:48px;height:48px;border-radius:50%;
+        background:radial-gradient(circle at 35% 30%, #dffcff, #5fffd7 50%, #11665b 100%);
+        border:3px solid #dffff4;
+        box-shadow:0 0 18px rgba(95,255,215,.75);
+        display:flex;align-items:center;justify-content:center;
+        font-size:24px;line-height:1;
+      ">🤖</div>`,
     pointsMult: 1.2,
     healthMult: 1.15,
   },
   pirate: {
     label: "Pirate Captain",
-    iconHtml: `<div style="font-size:42px">🏴‍☠️</div>`,
+    iconHtml: `
+      <div style="
+        width:48px;height:48px;border-radius:50%;
+        background:radial-gradient(circle at 35% 30%, #ffe0e6, #ff5d73 50%, #7f2131 100%);
+        border:3px solid #ffd4dc;
+        box-shadow:0 0 18px rgba(255,93,115,.75);
+        display:flex;align-items:center;justify-content:center;
+        font-size:24px;line-height:1;
+      ">🏴‍☠️</div>`,
     pointsMult: 1.15,
     healthMult: 1.05,
   },
 };
 
-function getCharacter() {
-  const key = state.settings?.character || "hero_duo";
-  return CHARACTERS[key] || CHARACTERS.hero_duo;
-}
-
-// ===== PIN RULES =====
 const PIN_RULES = {
   1: {
     label: "HOME BASE PROTOCOL",
@@ -169,6 +158,69 @@ const PIN_RULES = {
   },
 };
 
+const VOICE_PACK = {
+  kid: {
+    welcome: "Hey explorers! Welcome back!",
+    nearPin: "Nice! You found a mission spot. Tap the lightning button!",
+    correct: "Brilliant! You got it right!",
+    capture: "Node captured! Great work!",
+  },
+  teen: {
+    welcome: "Alright. Mission time.",
+    nearPin: "You're in range. Hit the lightning button.",
+    correct: "Correct.",
+    capture: "Node captured.",
+  },
+};
+
+let map = null;
+let hero = null;
+let cur = null;
+let activeTask = null;
+let activeMarkers = {};
+let audioCtx = null;
+
+let healthActive = false;
+let healthLast = null;
+let healthMeters = 0;
+let healthTarget = 0;
+
+function getCharacter() {
+  const key = state.settings?.character || "hero_duo";
+  return CHARACTERS[key] || CHARACTERS.hero_duo;
+}
+
+function getRank() {
+  return state.session.rank ?? 1;
+}
+
+function updateRank() {
+  let nextRank = 1;
+  for (const row of RANK_TABLE) {
+    if ((state.session.missionsCompleted ?? 0) >= row.missions) {
+      nextRank = row.rank;
+    }
+  }
+  state.session.rank = nextRank;
+}
+
+function completeMissionProgress() {
+  state.session.missionsCompleted = (state.session.missionsCompleted ?? 0) + 1;
+  updateRank();
+}
+
+function getCaptureNeed() {
+  return state.rules?.captureNeed ?? 3;
+}
+
+function getEnterRadiusM() {
+  const v = parseInt(
+    state.settings?.enterRadiusM ?? ENTER_RADIUS_M_DEFAULT,
+    10
+  );
+  return Number.isFinite(v) ? v : ENTER_RADIUS_M_DEFAULT;
+}
+
 function getPinRule(pin) {
   return pin ? PIN_RULES[pin.id] || null : null;
 }
@@ -195,67 +247,47 @@ function allowedModesFor(pin) {
     : null;
 }
 
-// ===== RUNTIME =====
-let cur = null;
-let activeMarkers = {};
-let hero = null;
-let map = null;
-let activeTask = null;
+function nodeState(id) {
+  if (!state.nodes[id]) {
+    state.nodes[id] = {
+      completedModes: [],
+      cooldownUntil: 0,
+    };
+  }
+  return state.nodes[id];
+}
 
-// ===== HEALTH TRACKER =====
-let healthActive = false;
-let healthLast = null;
-let healthMeters = 0;
-let healthTarget = 0;
+function isOnCooldown(id) {
+  const ns = nodeState(id);
+  return ns.cooldownUntil && Date.now() < ns.cooldownUntil;
+}
 
-// ===== VOICE PACK =====
-const VOICE_PACK = {
-  kid: {
-    welcome: "Hey explorers! Welcome back!",
-    nearPin: "Nice! You found a mission spot. Tap the lightning button!",
-    correct: "Brilliant! You got it right!",
-    capture: "Node captured! Great work!",
-  },
-  teen: {
-    welcome: "Alright. Mission time.",
-    nearPin: "You're in range. Hit the lightning button.",
-    correct: "Correct.",
-    capture: "Node captured.",
-  },
-};
+// All pins always visible now.
+function pinMatchesExperience(_pin) {
+  return true;
+}
+
+function pinUnlockedForRank(_pin) {
+  return true;
+}
+
+function getVisiblePins() {
+  return PINS.filter(
+    (pin) => pinMatchesExperience(pin) && pinUnlockedForRank(pin)
+  );
+}
 
 function cleanSpeechText(text) {
   return String(text || "").replace(/[^\w\s.,!?'"():;\-]/g, "");
 }
 
+function difficultyTier() {
+  return state.dp <= 4 ? "kid" : "adult";
+}
+
 function voiceLine(key) {
   const pack = difficultyTier() === "kid" ? VOICE_PACK.kid : VOICE_PACK.teen;
   return pack[key] || "";
-}
-
-// ===== SAFE CLICK WIRING =====
-function onClick(id, fn) {
-  const el = $(id);
-  if (!el) return;
-  el.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    fn(e);
-  });
-}
-
-// ===== HELPERS =====
-function haversineMeters(a, b) {
-  const R = 6371000;
-  const toRad = (x) => (x * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const lat1 = toRad(a.lat);
-  const lat2 = toRad(b.lat);
-  const s =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
 }
 
 function speak(t) {
@@ -282,6 +314,16 @@ function speak(t) {
   } catch {}
 }
 
+function onClick(id, fn) {
+  const el = $(id);
+  if (!el) return;
+  el.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    fn(e);
+  });
+}
+
 function toggleM(id, force) {
   const m = $(id);
   if (!m) return;
@@ -292,35 +334,18 @@ function toggleM(id, force) {
   m.style.display = m.style.display === "block" ? "none" : "block";
 }
 
-function activeParticipantLabel() {
-  if (state.activeParticipant === "kylan") return "Kylan";
-  if (state.activeParticipant === "piper") return "Piper";
-  if (state.activeParticipant === "khyl") return "KHYL";
-  return "Both";
+function haversineMeters(a, b) {
+  const R = 6371000;
+  const toRad = (x) => (x * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
 }
-
-function showRewardPanel(show = true) {
-  const panel = $("reward-panel");
-  if (panel) panel.style.display = show ? "block" : "none";
-}
-
-function getPendingRewardAmount() {
-  if (activeTask?.pendingReward) return activeTask.pendingReward;
-  if (state.pendingCaptureReward) return state.pendingCaptureReward;
-  return PASS_BONUS_COINS;
-}
-
-function clearPendingRewards() {
-  if (activeTask) {
-    activeTask.rewardedOnPass = true;
-    activeTask.pendingReward = 0;
-  }
-  state.pendingCaptureReward = 0;
-  save();
-}
-
-// ===== REWARD FX =====
-let audioCtx = null;
 
 function getSfxVolume() {
   const pct = parseInt(state.settings?.sfxVol ?? 80, 10);
@@ -470,143 +495,37 @@ function warnTryAgain() {
   showRewardPopup("NOT QUITE", "Try again, explorer.", "fail");
 }
 
-// ===== SAVE + HUD =====
-function save() {
-  state.dk = parseInt($("dk")?.value || state.dk, 10);
-  state.dp = parseInt($("dp")?.value || state.dp, 10);
+function showRewardOnly(message) {
+  const desc = $("task-desc");
+  const options = $("task-options");
+  const feedback = $("task-feedback");
+  const completeBtn = $("btn-task-complete");
 
-  const r = $("enter-radius");
-  if (r) {
-    state.settings.enterRadiusM =
-      parseInt(r.value, 10) || state.settings.enterRadiusM;
+  if (desc) desc.style.display = "none";
+  if (options) options.innerHTML = "";
+  if (feedback) {
+    feedback.style.display = "block";
+    feedback.innerText = message || "Reward ready.";
   }
+  if (completeBtn) completeBtn.style.display = "none";
 
-  const cs = $("char-select");
-  if (cs) state.settings.character = cs.value || state.settings.character;
-
-  const vr = $("v-rate");
-  if (vr) {
-    state.settings.voiceRate = parseFloat(vr.value) || state.settings.voiceRate;
-  }
-
-  const sv = $("sfx-vol");
-  if (sv) {
-    state.settings.sfxVol = parseInt(sv.value, 10) || state.settings.sfxVol;
-  }
-
-  const ps = $("participant-select");
-  if (ps) {
-    state.activeParticipant = ps.value || state.activeParticipant || "both";
-  }
-
-  localStorage.setItem("bq_master_v4", JSON.stringify(state));
-
-  if ($("h-k")) $("h-k").innerText = state.k;
-  if ($("h-p")) $("h-p").innerText = state.p;
-  if ($("h-me")) $("h-me").innerText = state.khyl;
-
-  if ($("hp-k-tag")) {
-    $("hp-k-tag").className = state.hpK
-      ? "hp-status hp-on"
-      : "hp-status hp-off";
-    $("hp-k-tag").innerText = state.hpK ? "ACTIVE" : "OFF";
-  }
-
-  if ($("hp-p-tag")) {
-    $("hp-p-tag").className = state.hpP
-      ? "hp-status hp-on"
-      : "hp-status hp-off";
-    $("hp-p-tag").innerText = state.hpP ? "ACTIVE" : "OFF";
-  }
-
-  updateCaptureHud();
-  updateRankHud();
+  showRewardPanel(true);
 }
 
-function updateRankHud() {
-  let existing = $("rank-hud");
-  if (!existing) {
-    const coinHud = $("coin-hud");
-    if (coinHud) {
-      existing = document.createElement("div");
-      existing.id = "rank-hud";
-      existing.style.marginTop = "6px";
-      existing.style.fontSize = "12px";
-      existing.style.color = "var(--gold)";
-      coinHud.appendChild(existing);
-    }
+function resetTaskView() {
+  const desc = $("task-desc");
+  const feedback = $("task-feedback");
+  const completeBtn = $("btn-task-complete");
+
+  if (desc) desc.style.display = "block";
+  if (feedback) {
+    feedback.style.display = "none";
+    feedback.innerText = "";
   }
-  if (!existing) return;
-
-  const next = RANK_TABLE.find((x) => x.rank > getRank());
-  existing.innerText = next
-    ? `RANK ${getRank()} | MISSIONS ${state.session.missionsCompleted} | NEXT ${next.missions}`
-    : `RANK ${getRank()} | MISSIONS ${state.session.missionsCompleted} | MAX`;
+  if (completeBtn) completeBtn.style.display = "none";
+  showRewardPanel(false);
 }
 
-function toggleHP(unit) {
-  if (unit === "k") state.hpK = !state.hpK;
-  if (unit === "p") state.hpP = !state.hpP;
-  speak(unit === "k" ? "Kylan gear synced" : "Piper gear synced");
-  save();
-}
-
-// ===== NODE STATE =====
-function nodeState(id) {
-  if (!state.nodes[id]) {
-    state.nodes[id] = {
-      completedModes: [],
-      cooldownUntil: 0,
-    };
-  }
-  return state.nodes[id];
-}
-
-function isOnCooldown(id) {
-  const ns = nodeState(id);
-  return ns.cooldownUntil && Date.now() < ns.cooldownUntil;
-}
-
-// ===== EXPERIENCE + UNLOCKING =====
-function pinMatchesExperience(pin) {
-  const exp = state.currentExperience || "park";
-  if (exp === "full") return true;
-  if (exp === "park") return pin.zone === "Nature";
-  if (exp === "docks") {
-    return pin.zone === "Docks" || pin.zone === "Industrial";
-  }
-  return true;
-}
-
-function pinUnlockedForRank(pin) {
-  const rank = getRank();
-
-  if (state.currentExperience === "park") {
-    if (rank === 1) return pin.id <= 7 || pin.id === 35 || pin.id === 37;
-    if (rank === 2) return pin.zone === "Nature";
-    return pin.zone === "Nature";
-  }
-
-  if (state.currentExperience === "docks") {
-    if (rank === 1) return [3, 13, 24, 46, 69, 81].includes(pin.id);
-    if (rank === 2) return pin.zone === "Docks" || pin.zone === "Industrial";
-    return pin.zone === "Docks" || pin.zone === "Industrial";
-  }
-
-  if (rank === 1) return pin.id <= 20;
-  if (rank === 2) return pin.id <= 40;
-  if (rank === 3) return pin.id <= 70;
-  if (rank === 4) return pin.id <= 100;
-  return true;
-}
-
-function getVisiblePins() {
-  return PINS.filter(
-    (pin) => pinMatchesExperience(pin) && pinUnlockedForRank(pin)
-  );
-}
-
-// ===== MAP INIT =====
 function initMap() {
   map = L.map("map", { zoomControl: false }).setView([54.1137, -3.2184], 17);
 
@@ -624,8 +543,10 @@ function initMap() {
 
   hero = L.marker([54.1137, -3.2184], {
     icon: L.divIcon({
-      html: getCharacter().iconHtml,
       className: "marker-logo",
+      html: getCharacter().iconHtml,
+      iconSize: [48, 48],
+      iconAnchor: [24, 24],
     }),
   }).addTo(map);
 
@@ -636,7 +557,14 @@ function initMap() {
 function refreshHeroIcon() {
   if (!hero) return;
   const c = getCharacter();
-  hero.setIcon(L.divIcon({ html: c.iconHtml, className: "marker-logo" }));
+  hero.setIcon(
+    L.divIcon({
+      className: "marker-logo",
+      html: c.iconHtml,
+      iconSize: [48, 48],
+      iconAnchor: [24, 24],
+    })
+  );
 }
 
 function initPins() {
@@ -648,7 +576,26 @@ function initPins() {
   getVisiblePins().forEach((p) => {
     if (!isOnCooldown(p.id)) {
       const m = L.marker(p.l, {
-        icon: L.divIcon({ className: "marker-logo", html: p.i || "📍" }),
+        icon: L.divIcon({
+          className: "marker-logo",
+          html: `
+            <div style="
+              width:40px;
+              height:40px;
+              border-radius:50%;
+              background:radial-gradient(circle at 35% 30%, #ffffff, #e9ecff 45%, #8c95b8 100%);
+              border:2px solid #ffffff;
+              box-shadow:0 0 14px rgba(255,255,255,.45);
+              display:flex;
+              align-items:center;
+              justify-content:center;
+              font-size:22px;
+              line-height:1;
+            ">${p.i || "📍"}</div>
+          `,
+          iconSize: [40, 40],
+          iconAnchor: [20, 20],
+        }),
       }).addTo(map);
       activeMarkers[p.id] = m;
     }
@@ -683,22 +630,20 @@ function startGPSWatcher() {
 
       if (healthMeters >= healthTarget) {
         healthActive = false;
-        if (fb) {
-          fb.innerText = `Completed Distance: ${healthMeters.toFixed(0)}m`;
-        }
         if (activeTask) {
           activeTask.passed = true;
-          activeTask.pendingReward = PASS_BONUS_COINS;
+          activeTask.pendingReward =
+            PASS_BONUS_COINS +
+            Math.round(100 * (getCharacter().pointsMult ?? 1));
         }
         celebrateCorrect("Health objective complete!");
-        showRewardPanel(true);
-        speak("Health objective complete.");
+        showRewardOnly("Health objective complete. Choose who gets the points.");
       }
     }
 
-    const near = getVisiblePins().find(
-      (p) =>
-        map.distance(e.latlng, p.l) < getEnterRadiusM() && !isOnCooldown(p.id)
+    const visiblePins = getVisiblePins();
+    const near = visiblePins.find(
+      (p) => map.distance(e.latlng, p.l) < getEnterRadiusM() && !isOnCooldown(p.id)
     );
 
     if (near) {
@@ -718,7 +663,377 @@ function startGPSWatcher() {
   });
 }
 
-// ===== HUD WIRING =====
+function showPinBanners(pin) {
+  const rule = getPinRule(pin);
+  const modeBanner = $("mode-banner");
+  const bossBanner = $("boss-banner");
+
+  if (modeBanner) modeBanner.style.display = "none";
+  if (bossBanner) bossBanner.style.display = "none";
+  if (!rule) return;
+
+  if (modeBanner) {
+    modeBanner.style.display = "block";
+    modeBanner.innerText = `${rule.label}\n${rule.banner || ""}`;
+  }
+
+  if (rule.type === "boss" && bossBanner) {
+    bossBanner.style.display = "block";
+    bossBanner.innerText = "BOSS MODE ACTIVE\nBoss phases enforced.";
+  }
+}
+
+function openQuest() {
+  if (!cur) return;
+
+  const ns = nodeState(cur.id);
+  if ($("q-name")) $("q-name").innerText = cur.n;
+  $("map")?.classList.add("shatter-mode");
+  toggleM("quest-modal", true);
+  showPinBanners(cur);
+
+  const effectiveNeed = getEffectiveCaptureNeed(cur);
+
+  if (isOnCooldown(cur.id)) {
+    const mins = Math.ceil((ns.cooldownUntil - Date.now()) / 60000);
+    if ($("quest-status")) {
+      $("quest-status").innerText = `STATUS: CAPTURED (reawakens in ~${mins} min)`;
+    }
+    disableModeTiles(true);
+  } else {
+    if ($("quest-status")) {
+      $("quest-status").innerText = `STATUS: READY (Complete ${effectiveNeed} modes to capture)`;
+    }
+    disableModeTiles(false);
+
+    const allowed = allowedModesFor(cur);
+    if (allowed) {
+      document.querySelectorAll(".m-tile").forEach((tile) => {
+        const mode = tile.getAttribute("data-mode");
+        const ok = allowed.includes(mode);
+        tile.style.opacity = ok ? "1" : "0.2";
+        tile.style.pointerEvents = ok ? "auto" : "none";
+      });
+    } else {
+      document.querySelectorAll(".m-tile").forEach((tile) => {
+        tile.style.opacity = "1";
+        tile.style.pointerEvents = "auto";
+      });
+    }
+  }
+
+  updateCaptureHud();
+  speak("Node discovered. Select mode.");
+}
+
+function closeQuest() {
+  toggleM("quest-modal", false);
+  $("map")?.classList.remove("shatter-mode");
+}
+
+function disableModeTiles(disabled) {
+  document.querySelectorAll(".m-tile").forEach((tile) => {
+    tile.style.opacity = disabled ? "0.35" : "1";
+    tile.style.pointerEvents = disabled ? "none" : "auto";
+  });
+}
+
+function maybeWildcard() {
+  const roll = Math.random();
+  if (roll > 0.05) return null;
+
+  return {
+    q: "WILDCARD: Treasure chest discovered!",
+    options: ["OPEN CHEST", "LEAVE IT", "SKIP", "UNSAFE"],
+    answer: 0,
+    fact: "Lucky find! Rare reward ready.",
+    meta: { wildcard: true, rewardCoins: 250 },
+  };
+}
+
+function launchMode(mode) {
+  if (!cur) return;
+
+  const ns = nodeState(cur.id);
+  const allowed = allowedModesFor(cur);
+
+  if (allowed && !allowed.includes(mode)) {
+    speak("This mode is locked at this node.");
+    return;
+  }
+
+  if (ns.completedModes.includes(mode)) {
+    speak("Mode already completed here. Choose a different mode.");
+    return;
+  }
+
+  const tier = difficultyTier();
+  const wildcard = maybeWildcard();
+  const q = wildcard || getQA(cur.id, mode, tier, state.session.qaSalt);
+
+  activeTask = {
+    mode,
+    requiresPass: true,
+    passed: false,
+    rewardedOnPass: false,
+    pendingReward: 0,
+    prompt: q.q,
+    options: q.options,
+    answerIndex: q.answer,
+    fact: q.fact || "",
+    meta: q.meta || {},
+  };
+
+  if ($("task-title")) {
+    $("task-title").innerText = `${mode.toUpperCase()} @ ${cur.n}`;
+  }
+  if ($("task-desc")) $("task-desc").innerText = activeTask.prompt;
+
+  resetTaskView();
+  renderOptions(activeTask);
+
+  toggleM("quest-modal", false);
+  toggleM("task-modal", true);
+  speak(activeTask.prompt);
+}
+
+function renderOptions(task) {
+  const wrap = $("task-options");
+  if (!wrap) return;
+
+  wrap.innerHTML = (task.options || [])
+    .map(
+      (opt, idx) => `
+        <button class="mcq-btn" data-idx="${idx}">
+          ${String.fromCharCode(65 + idx)}) ${opt}
+        </button>
+      `
+    )
+    .join("");
+
+  wrap.querySelectorAll(".mcq-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = parseInt(btn.dataset.idx, 10);
+      selectOption(idx);
+    });
+  });
+}
+
+function selectOption(idx) {
+  if (!activeTask) return;
+
+  if (activeTask.mode === "health") {
+    if (idx === 0) {
+      const char = getCharacter();
+      const base =
+        activeTask.meta?.meters ?? (difficultyTier() === "kid" ? 30 : 80);
+      const meters = Math.max(10, Math.round(base * (char.healthMult ?? 1.0)));
+      healthActive = true;
+      healthMeters = 0;
+      healthTarget = meters;
+      healthLast = null;
+      activeTask.passed = false;
+      speak("Tracking started. Keep walking.");
+      return;
+    }
+
+    if (idx === 1) {
+      healthActive = false;
+      toggleM("task-modal", false);
+      openQuest();
+      return;
+    }
+  }
+
+  if (
+    activeTask.mode === "battle" ||
+    activeTask.mode === "speed" ||
+    activeTask.mode === "family" ||
+    activeTask.mode === "activity"
+  ) {
+    if (idx === 0) {
+      activeTask.passed = true;
+      activeTask.pendingReward =
+        PASS_BONUS_COINS +
+        Math.round(100 * (getCharacter().pointsMult ?? 1));
+      celebrateCorrect(activeTask.fact || "Completed.");
+      showRewardOnly(activeTask.fact || "Completed. Choose who gets the points.");
+      return;
+    }
+
+    if (idx === 1) {
+      if ($("task-feedback")) {
+        $("task-feedback").style.display = "block";
+        $("task-feedback").innerText = "Not yet.";
+      }
+      return;
+    }
+
+    if (idx === 2 || idx === 3) {
+      activeTask.passed = true;
+      activeTask.pendingReward = 0;
+      toggleM("task-modal", false);
+      openQuest();
+      return;
+    }
+  }
+
+  const correct = idx === activeTask.answerIndex;
+
+  if (correct) {
+    activeTask.passed = true;
+    activeTask.pendingReward =
+      (activeTask.meta?.rewardCoins || PASS_BONUS_COINS) +
+      Math.round(100 * (getCharacter().pointsMult ?? 1));
+
+    celebrateCorrect(activeTask.fact || "Nice work!");
+    speak(voiceLine("correct"));
+    showRewardOnly(activeTask.fact || "Correct. Choose who gets the points.");
+  } else {
+    if ($("task-feedback")) {
+      $("task-feedback").style.display = "block";
+      $("task-feedback").innerText = "Not quite. Try again.";
+    }
+    warnTryAgain();
+    speak("Not quite. Try again.");
+  }
+}
+
+function finalizeReward(target) {
+  if (!cur || !activeTask) return;
+
+  const amount = getPendingRewardAmount();
+  awardPointsTo(target, amount);
+  clearPendingRewards();
+  showRewardPanel(false);
+
+  const ns = nodeState(cur.id);
+  if (!ns.completedModes.includes(activeTask.mode)) {
+    ns.completedModes.push(activeTask.mode);
+    completeMissionProgress();
+    save();
+  }
+
+  const need = getEffectiveCaptureNeed(cur);
+  const reqModes = requiredModesFor(cur);
+  const reqOk = reqModes
+    ? reqModes.every((m) => ns.completedModes.includes(m))
+    : true;
+
+  toggleM("task-modal", false);
+
+  if (ns.completedModes.length >= need && reqOk) {
+    captureNode(cur);
+  } else {
+    openQuest();
+  }
+}
+
+function captureNode(pin) {
+  const ns = nodeState(pin.id);
+  ns.cooldownUntil = Date.now() + getEffectiveCooldownMs(pin);
+  ns.completedModes = [];
+  state.session.qaSalt = Date.now();
+
+  if (activeMarkers[pin.id]) {
+    map.removeLayer(activeMarkers[pin.id]);
+    delete activeMarkers[pin.id];
+  }
+
+  save();
+
+  const rule = getPinRule(pin);
+  const mins = rule?.cooldownMin ?? state.rules?.cooldownMin ?? 10;
+  celebrateCapture(mins);
+
+  showRewardPopup(
+    "CAPTURE REWARD READY",
+    `Choose who gets +${CAPTURE_BONUS_COINS} coins`
+  );
+
+  state.pendingCaptureReward = CAPTURE_BONUS_COINS;
+  toggleM("task-modal", true);
+
+  if ($("task-title")) $("task-title").innerText = "NODE CAPTURED";
+  if ($("task-desc")) {
+    $("task-desc").style.display = "none";
+  }
+  if ($("task-options")) {
+    $("task-options").innerHTML = "";
+  }
+  if ($("task-feedback")) {
+    $("task-feedback").style.display = "block";
+    $("task-feedback").innerText = "Choose who gets the capture reward.";
+  }
+
+  showRewardPanel(true);
+  toggleM("quest-modal", false);
+  $("map")?.classList.remove("shatter-mode");
+  updateCaptureHud();
+}
+
+function updateCaptureHud() {
+  const hud = $("capture-hud");
+  if (!hud) return;
+
+  if (!cur) {
+    hud.innerText = "CAPTURE: -";
+    return;
+  }
+
+  const ns = nodeState(cur.id);
+  const need = getEffectiveCaptureNeed(cur);
+  const left = Math.max(0, need - ns.completedModes.length);
+  const rule = getPinRule(cur);
+  const label = rule?.type === "boss" ? "BOSS" : "CAPTURE";
+
+  hud.innerText = isOnCooldown(cur.id)
+    ? `${label}: LOCKED`
+    : `${label}: ${ns.completedModes.length}/${need} (need ${left} more)`;
+}
+
+function renderHomeLog() {
+  const sum = $("home-summary");
+  const list = $("home-list");
+  if (!sum || !list) return;
+
+  const now = Date.now();
+  let completed = 0;
+  let locked = 0;
+  const rows = [];
+
+  getVisiblePins().forEach((p) => {
+    const ns = nodeState(p.id);
+    const onCd = ns.cooldownUntil && now < ns.cooldownUntil;
+    const doneCount = ns.completedModes?.length || 0;
+
+    if (onCd) locked++;
+    if (doneCount > 0 || onCd) completed++;
+
+    let status = "Fresh";
+    if (onCd) {
+      const mins = Math.ceil((ns.cooldownUntil - now) / 60000);
+      status = `Captured (back in ~${mins}m)`;
+    } else if (doneCount > 0) {
+      status = `Progress (${doneCount}/${getEffectiveCaptureNeed(p)} modes)`;
+    }
+
+    rows.push({ name: p.n, status });
+  });
+
+  sum.innerHTML = `Pins: <b>${getVisiblePins().length}</b> | Active/seen: <b>${completed}</b> | Locked: <b>${locked}</b> | Kylan: <b>${state.k}</b> | Piper: <b>${state.p}</b> | KHYL: <b>${state.khyl}</b> | Rank: <b>${getRank()}</b>`;
+
+  list.innerHTML = rows
+    .map(
+      (r) => `
+        <div style="padding:10px;border:1px solid #333;border-radius:12px;margin:8px 0;background:#111;">
+          <div style="font-weight:bold;">${r.name}</div>
+          <div style="opacity:.85;font-size:12px;">${r.status}</div>
+        </div>`
+    )
+    .join("");
+}
+
 function wireHUD() {
   onClick("btn-home", () => {
     renderHomeLog();
@@ -862,37 +1177,14 @@ function wireHUD() {
     speak("All nodes reset.");
   });
 
-  onClick("btn-award-kylan", () => {
-    const amount = getPendingRewardAmount();
-    awardPointsTo("kylan", amount);
-    clearPendingRewards();
-    showRewardPanel(false);
-  });
-
-  onClick("btn-award-piper", () => {
-    const amount = getPendingRewardAmount();
-    awardPointsTo("piper", amount);
-    clearPendingRewards();
-    showRewardPanel(false);
-  });
-
-  onClick("btn-award-khyl", () => {
-    const amount = getPendingRewardAmount();
-    awardPointsTo("khyl", amount);
-    clearPendingRewards();
-    showRewardPanel(false);
-  });
-
-  onClick("btn-award-both", () => {
-    const amount = getPendingRewardAmount();
-    awardPointsTo("both", amount);
-    clearPendingRewards();
-    showRewardPanel(false);
-  });
+  onClick("btn-award-kylan", () => finalizeReward("kylan"));
+  onClick("btn-award-piper", () => finalizeReward("piper"));
+  onClick("btn-award-khyl", () => finalizeReward("khyl"));
+  onClick("btn-award-both", () => finalizeReward("both"));
 
   onClick("btn-test", () => {
     speak("Systems online. GPS ready.");
-    showRewardPopup("SYSTEMS OK", "AI and AR start gate removed.");
+    showRewardPopup("SYSTEMS OK", "All pins unlocked and reward flow simplified.");
   });
 
   onClick("btn-start", () => {
@@ -927,87 +1219,9 @@ function initExperienceFromStart() {
   }
 }
 
-// ===== QUEST OPEN/CLOSE =====
-function showPinBanners(pin) {
-  const rule = getPinRule(pin);
-  const modeBanner = $("mode-banner");
-  const bossBanner = $("boss-banner");
-
-  if (modeBanner) modeBanner.style.display = "none";
-  if (bossBanner) bossBanner.style.display = "none";
-  if (!rule) return;
-
-  if (modeBanner) {
-    modeBanner.style.display = "block";
-    modeBanner.innerText = `${rule.label}\n${rule.banner || ""}`;
-  }
-
-  if (rule.type === "boss" && bossBanner) {
-    bossBanner.style.display = "block";
-    bossBanner.innerText = "BOSS MODE ACTIVE\nBoss phases enforced.";
-  }
-}
-
-function openQuest() {
-  if (!cur) return;
-
-  const ns = nodeState(cur.id);
-  if ($("q-name")) $("q-name").innerText = cur.n;
-  $("map")?.classList.add("shatter-mode");
-  toggleM("quest-modal", true);
-  showPinBanners(cur);
-
-  const effectiveNeed = getEffectiveCaptureNeed(cur);
-
-  if (isOnCooldown(cur.id)) {
-    const mins = Math.ceil((ns.cooldownUntil - Date.now()) / 60000);
-    if ($("quest-status")) {
-      $("quest-status").innerText = `STATUS: CAPTURED (reawakens in ~${mins} min)`;
-    }
-    disableModeTiles(true);
-  } else {
-    if ($("quest-status")) {
-      $("quest-status").innerText = `STATUS: READY (Complete ${effectiveNeed} modes to capture)`;
-    }
-    disableModeTiles(false);
-
-    const allowed = allowedModesFor(cur);
-    if (allowed) {
-      document.querySelectorAll(".m-tile").forEach((tile) => {
-        const mode = tile.getAttribute("data-mode");
-        const ok = allowed.includes(mode);
-        tile.style.opacity = ok ? "1" : "0.2";
-        tile.style.pointerEvents = ok ? "auto" : "none";
-      });
-    } else {
-      document.querySelectorAll(".m-tile").forEach((tile) => {
-        tile.style.opacity = "1";
-        tile.style.pointerEvents = "auto";
-      });
-    }
-  }
-
-  updateCaptureHud();
-  speak("Node discovered. Select mode.");
-}
-
-function closeQuest() {
-  toggleM("quest-modal", false);
-  $("map")?.classList.remove("shatter-mode");
-}
-
-function disableModeTiles(disabled) {
-  document.querySelectorAll(".m-tile").forEach((tile) => {
-    tile.style.opacity = disabled ? "0.35" : "1";
-    tile.style.pointerEvents = disabled ? "none" : "auto";
-  });
-}
-
-// ===== MODE LAUNCH =====
 function wireModes() {
   onClick("btn-close-quest", closeQuest);
   onClick("btn-task-close", () => toggleM("task-modal", false));
-  onClick("btn-task-complete", finishMode);
 
   document.querySelectorAll(".m-tile").forEach((tile) => {
     tile.addEventListener("click", () => {
@@ -1017,344 +1231,6 @@ function wireModes() {
   });
 }
 
-function difficultyTier() {
-  return state.dp <= 4 ? "kid" : "adult";
-}
-
-function maybeWildcard() {
-  const roll = Math.random();
-  if (roll > 0.05) return null;
-
-  return {
-    q: "WILDCARD: Treasure chest discovered!",
-    options: ["OPEN CHEST", "LEAVE IT", "SKIP", "UNSAFE"],
-    answer: 0,
-    fact: "Lucky find! Rare reward ready.",
-    meta: { wildcard: true, rewardCoins: 250 },
-  };
-}
-
-function launchMode(mode) {
-  if (!cur) return;
-
-  const ns = nodeState(cur.id);
-
-  const allowed = allowedModesFor(cur);
-  if (allowed && !allowed.includes(mode)) {
-    speak("This mode is locked at this node.");
-    return;
-  }
-
-  if (ns.completedModes.includes(mode)) {
-    speak("Mode already completed here. Choose a different mode.");
-    return;
-  }
-
-  const tier = difficultyTier();
-  const wildcard = maybeWildcard();
-  const q = wildcard || getQA(cur.id, mode, tier, state.session.qaSalt);
-
-  activeTask = {
-    mode,
-    requiresPass: true,
-    passed: false,
-    rewardedOnPass: false,
-    pendingReward: 0,
-    prompt: q.q,
-    options: q.options,
-    answerIndex: q.answer,
-    fact: q.fact || "",
-    meta: q.meta || {},
-  };
-
-  if ($("task-title")) {
-    $("task-title").innerText = `${mode.toUpperCase()} @ ${cur.n}`;
-  }
-  if ($("task-desc")) $("task-desc").innerText = activeTask.prompt;
-
-  renderOptions(activeTask);
-  showRewardPanel(false);
-
-  if ($("task-feedback")) {
-    $("task-feedback").style.display = "none";
-    $("task-feedback").innerText = "";
-  }
-
-  toggleM("quest-modal", false);
-  toggleM("task-modal", true);
-  speak(activeTask.prompt);
-}
-
-function renderOptions(task) {
-  const wrap = $("task-options");
-  if (!wrap) return;
-
-  wrap.innerHTML = (task.options || [])
-    .map(
-      (opt, idx) => `
-        <button class="mcq-btn" data-idx="${idx}">
-          ${String.fromCharCode(65 + idx)}) ${opt}
-        </button>
-      `
-    )
-    .join("");
-
-  wrap.querySelectorAll(".mcq-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const idx = parseInt(btn.dataset.idx, 10);
-      selectOption(idx);
-    });
-  });
-}
-
-function selectOption(idx) {
-  if (!activeTask) return;
-
-  if (activeTask.mode === "health") {
-    if (idx === 0) {
-      const char = getCharacter();
-      const base =
-        activeTask.meta?.meters ?? (difficultyTier() === "kid" ? 30 : 80);
-      const meters = Math.max(10, Math.round(base * (char.healthMult ?? 1.0)));
-      healthActive = true;
-      healthMeters = 0;
-      healthTarget = meters;
-      healthLast = null;
-      activeTask.passed = false;
-      speak("Tracking started. Keep walking.");
-      return;
-    }
-
-    if (idx === 1) {
-      healthActive = false;
-      speak("Health tracking cancelled.");
-      return;
-    }
-  }
-
-  if (
-    activeTask.mode === "battle" ||
-    activeTask.mode === "speed" ||
-    activeTask.mode === "family" ||
-    activeTask.mode === "activity"
-  ) {
-    if (idx === 0) {
-      activeTask.passed = true;
-      activeTask.pendingReward = PASS_BONUS_COINS;
-
-      if ($("task-feedback")) {
-        $("task-feedback").style.display = "block";
-        $("task-feedback").innerText =
-          activeTask.fact || "Completed. Reward ready.";
-      }
-
-      celebrateCorrect(activeTask.fact || "Completed.");
-      showRewardPanel(true);
-      return;
-    }
-
-    if (idx === 1) {
-      if ($("task-feedback")) {
-        $("task-feedback").style.display = "block";
-        $("task-feedback").innerText = "Not yet.";
-      }
-      return;
-    }
-
-    if (idx === 2 || idx === 3) {
-      activeTask.passed = true;
-      activeTask.pendingReward = 0;
-      if ($("task-feedback")) {
-        $("task-feedback").style.display = "block";
-        $("task-feedback").innerText = idx === 2 ? "Skipped." : "Marked unsafe.";
-      }
-      showRewardPanel(false);
-      return;
-    }
-  }
-
-  const correct = idx === activeTask.answerIndex;
-
-  if ($("task-feedback")) {
-    $("task-feedback").style.display = "block";
-    $("task-feedback").innerText = correct
-      ? `Correct! Reward ready. ${activeTask.fact || ""}`
-      : "Not quite. Try again.";
-  }
-
-  if (correct) {
-    activeTask.pendingReward = activeTask.meta?.rewardCoins || PASS_BONUS_COINS;
-    celebrateCorrect(activeTask.fact || "Nice work!");
-    speak(voiceLine("correct"));
-    showRewardPanel(true);
-  } else {
-    warnTryAgain();
-    speak("Not quite. Try again.");
-  }
-
-  activeTask.passed = correct;
-}
-
-function finishMode() {
-  if (!cur || !activeTask) return;
-
-  if (activeTask.requiresPass && !activeTask.passed) {
-    speak("You must complete this mode first.");
-    return;
-  }
-
-  const ns = nodeState(cur.id);
-  ns.completedModes.push(activeTask.mode);
-  completeMissionProgress();
-  save();
-
-  const mult = getCharacter().pointsMult ?? 1.0;
-  const gain = Math.round(100 * mult);
-  activeTask.pendingReward = (activeTask.pendingReward || 0) + gain;
-
-  if (activeTask.meta?.familyChain) {
-    const bonus = activeTask.meta.rewardCoins || 150;
-    activeTask.pendingReward = (activeTask.pendingReward || 0) + bonus;
-
-    if ($("task-feedback")) {
-      $("task-feedback").style.display = "block";
-      $("task-feedback").innerText = `FAMILY CHAIN COMPLETE!\nBonus ready to award\n${
-        activeTask.meta.badge || "Family Badge"
-      } unlocked`;
-    }
-
-    speak("Family chain complete. Choose who gets the reward.");
-    showRewardPanel(true);
-  }
-
-  if (activeTask.meta?.wildcard) {
-    showRewardPanel(true);
-    speak("Wildcard complete. Choose who gets the reward.");
-  }
-
-  const req = requiredModesFor(cur);
-  if (req) {
-    const leftReq = req.filter((m) => !ns.completedModes.includes(m));
-    speak(
-      leftReq.length > 0
-        ? `Phase complete. Remaining: ${leftReq.join(", ")}.`
-        : "All required phases complete."
-    );
-  } else {
-    speak("Mission secure.");
-  }
-
-  toggleM("task-modal", false);
-
-  const need = getEffectiveCaptureNeed(cur);
-  const reqModes = requiredModesFor(cur);
-  const reqOk = reqModes
-    ? reqModes.every((m) => ns.completedModes.includes(m))
-    : true;
-
-  if (ns.completedModes.length >= need && reqOk) {
-    captureNode(cur);
-  } else {
-    openQuest();
-  }
-}
-
-// ===== CAPTURE + COOLDOWN =====
-function captureNode(pin) {
-  const ns = nodeState(pin.id);
-  ns.cooldownUntil = Date.now() + getEffectiveCooldownMs(pin);
-  ns.completedModes = [];
-  state.session.qaSalt = Date.now();
-
-  if (activeMarkers[pin.id]) {
-    map.removeLayer(activeMarkers[pin.id]);
-    delete activeMarkers[pin.id];
-  }
-
-  save();
-
-  const rule = getPinRule(pin);
-  const mins = rule?.cooldownMin ?? state.rules?.cooldownMin ?? 10;
-  celebrateCapture(mins);
-
-  showRewardPopup(
-    "CAPTURE REWARD READY",
-    `Choose who gets +${CAPTURE_BONUS_COINS} coins`
-  );
-
-  state.pendingCaptureReward = CAPTURE_BONUS_COINS;
-  toggleM("task-modal", true);
-  showRewardPanel(true);
-  toggleM("quest-modal", false);
-  $("map")?.classList.remove("shatter-mode");
-  updateCaptureHud();
-}
-
-// ===== CAPTURE HUD =====
-function updateCaptureHud() {
-  const hud = $("capture-hud");
-  if (!hud) return;
-
-  if (!cur) {
-    hud.innerText = "CAPTURE: -";
-    return;
-  }
-
-  const ns = nodeState(cur.id);
-  const need = getEffectiveCaptureNeed(cur);
-  const left = Math.max(0, need - ns.completedModes.length);
-  const rule = getPinRule(cur);
-  const label = rule?.type === "boss" ? "BOSS" : "CAPTURE";
-
-  hud.innerText = isOnCooldown(cur.id)
-    ? `${label}: LOCKED`
-    : `${label}: ${ns.completedModes.length}/${need} (need ${left} more)`;
-}
-
-// ===== HOME LOG =====
-function renderHomeLog() {
-  const sum = $("home-summary");
-  const list = $("home-list");
-  if (!sum || !list) return;
-
-  const now = Date.now();
-  let completed = 0;
-  let locked = 0;
-  const rows = [];
-
-  getVisiblePins().forEach((p) => {
-    const ns = nodeState(p.id);
-    const onCd = ns.cooldownUntil && now < ns.cooldownUntil;
-    const doneCount = ns.completedModes?.length || 0;
-
-    if (onCd) locked++;
-    if (doneCount > 0 || onCd) completed++;
-
-    let status = "Fresh";
-    if (onCd) {
-      const mins = Math.ceil((ns.cooldownUntil - now) / 60000);
-      status = `Captured (back in ~${mins}m)`;
-    } else if (doneCount > 0) {
-      status = `Progress (${doneCount}/${getEffectiveCaptureNeed(p)} modes)`;
-    }
-
-    rows.push({ name: p.n, status });
-  });
-
-  sum.innerHTML = `Pins: <b>${getVisiblePins().length}</b> | Active/seen: <b>${completed}</b> | Locked: <b>${locked}</b> | Kylan: <b>${state.k}</b> | Piper: <b>${state.p}</b> | KHYL: <b>${state.khyl}</b> | Rank: <b>${getRank()}</b>`;
-
-  list.innerHTML = rows
-    .map(
-      (r) => `
-        <div style="padding:10px;border:1px solid #333;border-radius:12px;margin:8px 0;background:#111;">
-          <div style="font-weight:bold;">${r.name}</div>
-          <div style="opacity:.85;font-size:12px;">${r.status}</div>
-        </div>`
-    )
-    .join("");
-}
-
-// ===== BOOT =====
 function boot() {
   try {
     wireHUD();
