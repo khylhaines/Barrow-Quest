@@ -326,3 +326,4 @@ export async function createAIVerifier({ videoEl, canvasEl, statusEl }) {
 
   return { start, stop, captureAndVerify };
 }
+
