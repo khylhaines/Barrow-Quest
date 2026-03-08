@@ -11,7 +11,10 @@
     <title>Barrow Quest: Elite Master Hub</title>
 
     <link rel="manifest" href="./manifest.json" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
     <link rel="stylesheet" href="./styles.css" />
 
     <style>
@@ -149,8 +152,14 @@
       </div>
       <div style="color: var(--parent)">KHYL: <span id="h-me">0</span> 🪙</div>
       <div
+        id="rank-hud"
+        style="margin-top: 6px; font-size: 12px; color: var(--gold)"
+      >
+        RANK 1
+      </div>
+      <div
         id="capture-hud"
-        style="margin-top: 10px; font-size: 12px; color: var(--gold)"
+        style="margin-top: 6px; font-size: 12px; color: var(--gold)"
       >
         CAPTURE: -
       </div>
@@ -162,8 +171,12 @@
 
     <div class="hud-dock" aria-label="Bottom Controls">
       <button id="btn-home" class="hud-btn" aria-label="Home">🏠</button>
-      <button id="btn-commander" class="hud-btn" aria-label="Commander">🎮</button>
-      <button id="btn-settings" class="hud-btn" aria-label="Settings">⚙️</button>
+      <button id="btn-commander" class="hud-btn" aria-label="Commander">
+        🎮
+      </button>
+      <button id="btn-settings" class="hud-btn" aria-label="Settings">
+        ⚙️
+      </button>
     </div>
 
     <div id="start-modal" class="full-modal" style="display: block">
@@ -295,7 +308,8 @@
           <option value="khyl">KHYL ONLY</option>
         </select>
         <div class="settings-mini">
-          This sets the default active player, but rewards are still manually assigned.
+          This sets the default active player, but rewards are still manually
+          assigned.
         </div>
       </div>
 
@@ -472,16 +486,6 @@
           id="enter-radius"
           value="30"
         />
-
-        <div class="settings-line" style="margin-top: 12px">
-          <span>AR Strictness</span>
-          <strong><span id="ar-label">EASY</span></strong>
-        </div>
-        <select id="ar-mode">
-          <option value="easy" selected>EASY</option>
-          <option value="normal">NORMAL</option>
-          <option value="hard">HARD</option>
-        </select>
       </div>
 
       <div class="settings-card">
@@ -493,10 +497,12 @@
           <option value="robot">Robo Ranger</option>
           <option value="pirate">Pirate Captain</option>
         </select>
-        <div class="settings-mini">This changes the GPS marker and bonuses.</div>
+        <div class="settings-mini">
+          This changes the GPS marker and bonuses.
+        </div>
       </div>
 
-      <button class="win-btn" id="btn-test">TEST SYSTEMS / OPEN GALLERY</button>
+      <button class="win-btn" id="btn-test">TEST SYSTEMS</button>
       <button class="win-btn" id="btn-close-settings">CLOSE</button>
     </div>
 
@@ -513,18 +519,6 @@
         STATUS: -
       </div>
 
-      <button
-        class="win-btn"
-        id="btn-ar-open"
-        style="
-          background: #111;
-          color: var(--gold);
-          border: 2px solid var(--gold);
-        "
-      >
-        AR VERIFY (SCAN)
-      </button>
-
       <div class="mission-grid" style="margin-top: 15px">
         <div class="m-tile" data-mode="quiz"><span>❓</span>QUIZ</div>
         <div class="m-tile" data-mode="battle"><span>⚔️</span>BATTLE</div>
@@ -540,61 +534,6 @@
         class="win-btn"
         style="background: #222; color: white"
         id="btn-close-quest"
-      >
-        CLOSE
-      </button>
-    </div>
-
-    <div id="ar-modal" class="full-modal">
-      <h1 style="color: var(--gold)">AR VERIFY</h1>
-      <p id="ar-hint" style="opacity: 0.9">Face the landmark and scan.</p>
-
-      <div style="margin: 12px 0; text-align: left">
-        <div
-          id="ar-readout"
-          style="font-family: monospace; font-size: 13px; color: var(--neon)"
-        >
-          Heading: --
-        </div>
-        <div style="font-size: 12px; opacity: 0.85; margin-top: 6px">
-          Slowly turn in a circle until it verifies.
-        </div>
-      </div>
-
-      <video
-        id="ar-video"
-        autoplay
-        playsinline
-        muted
-        style="
-          width: 100%;
-          border-radius: 18px;
-          border: 2px solid #333;
-          background: #000;
-        "
-      ></video>
-
-      <div style="display: flex; gap: 10px; margin-top: 12px">
-        <button
-          class="win-btn"
-          id="btn-ar-stop"
-          style="background: #333; color: #fff"
-        >
-          STOP
-        </button>
-        <button
-          class="win-btn"
-          id="btn-ar-manual"
-          style="background: var(--gold); color: #000"
-        >
-          I SEE IT
-        </button>
-      </div>
-
-      <button
-        class="win-btn"
-        id="btn-ar-close"
-        style="background: #222; color: #fff; margin-top: 15px"
       >
         CLOSE
       </button>
@@ -676,115 +615,15 @@
       </button>
     </div>
 
-    <div id="ai-modal" class="full-modal">
-      <h1 style="color: var(--gold)">AI VERIFY</h1>
-      <p id="ai-hint" style="opacity: 0.9">
-        AI verify is currently disabled for stability.
-      </p>
-
-      <video
-        id="ai-video"
-        autoplay
-        playsinline
-        muted
-        style="
-          width: 100%;
-          border-radius: 18px;
-          border: 2px solid #333;
-          background: #000;
-        "
-      ></video>
-
-      <canvas
-        id="ai-canvas"
-        style="
-          width: 100%;
-          margin-top: 10px;
-          border-radius: 18px;
-          border: 2px solid #222;
-        "
-      ></canvas>
-
-      <div
-        id="ai-status"
-        style="margin-top: 10px; font-family: monospace; color: var(--neon)"
-      >
-        Disabled
-      </div>
-
-      <div style="display: flex; gap: 10px; margin-top: 12px">
-        <button
-          class="win-btn"
-          id="btn-ai-start"
-          style="background: #333; color: #fff"
-        >
-          START
-        </button>
-        <button
-          class="win-btn"
-          id="btn-ai-capture"
-          style="background: var(--gold); color: #000"
-        >
-          CAPTURE
-        </button>
-        <button
-          class="win-btn"
-          id="btn-ai-stop"
-          style="background: #333; color: #fff"
-        >
-          STOP
-        </button>
-      </div>
-
-      <button
-        class="win-btn"
-        id="btn-ai-close"
-        style="background: #222; color: #fff; margin-top: 14px"
-      >
-        CLOSE
-      </button>
-    </div>
-
-    <div id="gallery-modal" class="full-modal">
-      <h1 style="color: var(--gold)">QUEST GALLERY</h1>
-      <p style="opacity: 0.85; margin-top: 6px">
-        Verified photos saved on this device.
-      </p>
-
-      <div style="display: flex; gap: 10px; margin-top: 10px">
-        <button
-          class="win-btn"
-          id="btn-gallery-refresh"
-          style="background: #333; color: #fff"
-        >
-          REFRESH
-        </button>
-        <button
-          class="win-btn"
-          id="btn-gallery-clear"
-          style="background: #5a1; color: #000"
-        >
-          CLEAR ALL
-        </button>
-        <button
-          class="win-btn"
-          id="btn-gallery-close"
-          style="background: #222; color: #fff"
-        >
-          CLOSE
-        </button>
-      </div>
-
-      <div id="gallery-list" style="margin-top: 14px; text-align: left"></div>
-    </div>
-
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script type="module" src="./app.js"></script>
 
     <script>
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {
-          navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+          navigator.serviceWorker
+            .register("./service-worker.js")
+            .catch(() => {});
         });
       }
 
