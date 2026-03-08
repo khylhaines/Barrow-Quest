@@ -11,11 +11,7 @@
     <title>Barrow Quest: Elite Master Hub</title>
 
     <link rel="manifest" href="./manifest.json" />
-    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="./styles.css" />
 
     <style>
@@ -142,43 +138,34 @@
   </head>
 
   <body>
-    <!-- TOP HUD -->
     <div id="coin-hud">
       <div style="color: var(--kylan)">
         KYLAN: <span id="h-k">0</span> 🪙
-        <span id="hp-k-tag" class="hp-status hp-off">🎧 OFF</span>
+        <span id="hp-k-tag" class="hp-status hp-off">OFF</span>
       </div>
       <div style="color: var(--piper)">
         PIPER: <span id="h-p">0</span> 🪙
-        <span id="hp-p-tag" class="hp-status hp-off">🎧 OFF</span>
+        <span id="hp-p-tag" class="hp-status hp-off">OFF</span>
       </div>
       <div style="color: var(--parent)">KHYL: <span id="h-me">0</span> 🪙</div>
       <div
         id="capture-hud"
         style="margin-top: 10px; font-size: 12px; color: var(--gold)"
       >
-        CAPTURE: —
+        CAPTURE: -
       </div>
     </div>
 
-    <!-- MAP -->
     <div id="map"></div>
 
-    <!-- BIG ACTION BUTTON -->
     <button id="action-trigger" aria-label="Action">⚡</button>
 
-    <!-- BOTTOM DOCK -->
     <div class="hud-dock" aria-label="Bottom Controls">
       <button id="btn-home" class="hud-btn" aria-label="Home">🏠</button>
-      <button id="btn-commander" class="hud-btn" aria-label="Commander">
-        🎮
-      </button>
-      <button id="btn-settings" class="hud-btn" aria-label="Settings">
-        ⚙️
-      </button>
+      <button id="btn-commander" class="hud-btn" aria-label="Commander">🎮</button>
+      <button id="btn-settings" class="hud-btn" aria-label="Settings">⚙️</button>
     </div>
 
-    <!-- START / HOME SCREEN -->
     <div id="start-modal" class="full-modal" style="display: block">
       <div class="modal-header">
         <h2 style="color: var(--gold)">BARROW QUEST</h2>
@@ -198,28 +185,28 @@
           Choose your adventure
         </div>
         <div class="start-sub">
-          Kids and Teens can play different vibes — same map, better fun.
+          Kids and adults can play different vibes — same map, better fun.
         </div>
       </div>
 
       <div class="start-grid">
         <div class="start-card">
-          <h3>🧒 MODE</h3>
+          <h3>MODE</h3>
           <div class="pill-row" role="group" aria-label="Player mode">
             <button class="pill active" id="pill-kids" type="button">
-              KIDS (friendly)
+              KIDS
             </button>
             <button class="pill" id="pill-teen" type="button">
-              TEEN / ADULT (edgy)
+              TEEN / ADULT
             </button>
           </div>
           <div class="start-mini">
-            This controls question tone + activity vibe.
+            This changes question tone and activity vibe.
           </div>
         </div>
 
         <div class="start-card">
-          <h3>🎯 EXPERIENCE</h3>
+          <h3>EXPERIENCE</h3>
           <div class="pill-row" role="group" aria-label="Experience">
             <button class="pill active" id="pill-park" type="button">
               BARROW PARK
@@ -235,7 +222,7 @@
         </div>
 
         <div class="start-card">
-          <h3>🚀 READY?</h3>
+          <h3>READY?</h3>
           <div class="start-actions">
             <button class="win-btn" id="btn-start" type="button">
               START ADVENTURE
@@ -250,7 +237,7 @@
             </button>
           </div>
           <div class="start-mini">
-            Tip: You can always reopen this screen from the Home button later.
+            You can always reopen this from the Home button later.
           </div>
         </div>
       </div>
@@ -264,7 +251,6 @@
       </button>
     </div>
 
-    <!-- COMMANDER HUB -->
     <div id="commander-hub" class="full-modal">
       <div class="modal-header">
         <h1 style="color: var(--parent)">LEAD COMMANDER HUB</h1>
@@ -279,7 +265,7 @@
       </div>
 
       <div class="setting-row">
-        <h3>BATTLE MODS (HEADPHONES)</h3>
+        <h3>BATTLE MODS</h3>
         <div style="display: flex; gap: 10px">
           <button
             type="button"
@@ -309,8 +295,7 @@
           <option value="khyl">KHYL ONLY</option>
         </select>
         <div class="settings-mini">
-          This sets the default active player, but all mission rewards are still
-          manually assigned.
+          This sets the default active player, but rewards are still manually assigned.
         </div>
       </div>
 
@@ -330,7 +315,7 @@
       </div>
 
       <div class="setting-row">
-        <h3>🕒 GAME RULES</h3>
+        <h3>GAME RULES</h3>
 
         <p style="margin: 10px 0 6px">
           Cooldown minutes:
@@ -350,7 +335,7 @@
           id="btn-respawn-nodes"
           style="background: #444; color: #fff; margin-top: 14px"
         >
-          RESPAWN ALL NODES (SHOW MARKERS NOW)
+          RESPAWN ALL NODES
         </button>
       </div>
 
@@ -364,10 +349,9 @@
       </button>
     </div>
 
-    <!-- HOME LOG -->
     <div id="home-modal" class="full-modal">
       <div class="modal-header">
-        <h2 style="color: var(--gold)">🏠 HOME BASE LOG</h2>
+        <h2 style="color: var(--gold)">HOME BASE LOG</h2>
         <button
           type="button"
           class="close-x"
@@ -393,7 +377,6 @@
       </button>
     </div>
 
-    <!-- SETTINGS -->
     <div id="settings-modal" class="full-modal">
       <div class="modal-header">
         <h2 style="color: var(--gold)">SYSTEM CONFIG</h2>
@@ -405,17 +388,6 @@
         >
           ✕
         </button>
-      </div>
-
-      <div class="settings-card">
-        <h3>TIER MODE</h3>
-        <select id="tier-mode">
-          <option value="auto">AUTO (uses difficulty slider)</option>
-          <option value="kid">KIDS</option>
-          <option value="teen">TEENS</option>
-          <option value="adult">ADULTS</option>
-        </select>
-        <div class="settings-mini">This changes the vibe + QA tier.</div>
       </div>
 
       <div class="settings-card">
@@ -435,7 +407,7 @@
         />
 
         <div class="settings-mini">
-          Tip: pitch changes how high or low the voice sounds.
+          Pitch changes how high or low the voice sounds.
         </div>
 
         <div style="margin-top: 14px" class="settings-line">
@@ -506,29 +478,28 @@
           <strong><span id="ar-label">EASY</span></strong>
         </div>
         <select id="ar-mode">
-          <option value="easy" selected>EASY (fast verify)</option>
+          <option value="easy" selected>EASY</option>
           <option value="normal">NORMAL</option>
-          <option value="hard">HARD (tight bearings)</option>
+          <option value="hard">HARD</option>
         </select>
       </div>
 
       <div class="settings-card">
         <h3>CHARACTER SELECT</h3>
         <select id="char-select">
-          <option value="hero_duo" selected>Hero Duo (current)</option>
+          <option value="hero_duo" selected>Hero Duo</option>
           <option value="ninja">Ninja Scout</option>
           <option value="wizard">Wizard Guide</option>
           <option value="robot">Robo Ranger</option>
           <option value="pirate">Pirate Captain</option>
         </select>
-        <div class="settings-mini">This changes the GPS marker + bonuses.</div>
+        <div class="settings-mini">This changes the GPS marker and bonuses.</div>
       </div>
 
       <button class="win-btn" id="btn-test">TEST SYSTEMS / OPEN GALLERY</button>
       <button class="win-btn" id="btn-close-settings">CLOSE</button>
     </div>
 
-    <!-- QUEST MODAL -->
     <div id="quest-modal" class="full-modal">
       <h1 id="q-name" style="color: var(--gold)">ZONE</h1>
 
@@ -539,7 +510,7 @@
         id="quest-status"
         style="margin: 10px 0; font-size: 13px; color: #fff"
       >
-        STATUS: —
+        STATUS: -
       </div>
 
       <button
@@ -574,7 +545,6 @@
       </button>
     </div>
 
-    <!-- AR VERIFY MODAL -->
     <div id="ar-modal" class="full-modal">
       <h1 style="color: var(--gold)">AR VERIFY</h1>
       <p id="ar-hint" style="opacity: 0.9">Face the landmark and scan.</p>
@@ -587,7 +557,7 @@
           Heading: --
         </div>
         <div style="font-size: 12px; opacity: 0.85; margin-top: 6px">
-          Tip: slowly turn in a circle until it verifies.
+          Slowly turn in a circle until it verifies.
         </div>
       </div>
 
@@ -630,7 +600,6 @@
       </button>
     </div>
 
-    <!-- TASK / GAME MODAL -->
     <div id="task-modal" class="full-modal">
       <h1 id="task-title" style="color: var(--gold)">MISSION</h1>
 
@@ -707,11 +676,10 @@
       </button>
     </div>
 
-    <!-- AI VERIFY MODAL -->
     <div id="ai-modal" class="full-modal">
       <h1 style="color: var(--gold)">AI VERIFY</h1>
       <p id="ai-hint" style="opacity: 0.9">
-        Copy the pose, then press CAPTURE.
+        AI verify is currently disabled for stability.
       </p>
 
       <video
@@ -741,7 +709,7 @@
         id="ai-status"
         style="margin-top: 10px; font-family: monospace; color: var(--neon)"
       >
-        Ready…
+        Disabled
       </div>
 
       <div style="display: flex; gap: 10px; margin-top: 12px">
@@ -777,7 +745,6 @@
       </button>
     </div>
 
-    <!-- GALLERY MODAL -->
     <div id="gallery-modal" class="full-modal">
       <h1 style="color: var(--gold)">QUEST GALLERY</h1>
       <p style="opacity: 0.85; margin-top: 6px">
@@ -815,6 +782,12 @@
     <script type="module" src="./app.js"></script>
 
     <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+        });
+      }
+
       const pitch = document.getElementById("v-pitch");
       const pitchLabel = document.getElementById("pitch-label");
       if (pitch && pitchLabel) {
@@ -886,14 +859,6 @@
       if (startClose) startClose.addEventListener("click", hideStart);
       if (startCloseX) startCloseX.addEventListener("click", hideStart);
       if (startBtn) startBtn.addEventListener("click", hideStart);
-
-      if ("serviceWorker" in navigator) {
-        window.addEventListener("load", () => {
-          navigator.serviceWorker
-            .register("./service-worker.js")
-            .catch((err) => console.error("SW registration failed:", err));
-        });
-      }
     </script>
   </body>
 </html>
