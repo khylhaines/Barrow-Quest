@@ -1,20 +1,17 @@
 // app.js
 import { PINS } from "./pins.js";
 import { getQA } from "./qa.js";
-import { listPhotos, clearPhotos } from "./ai_verify.js";
 
 /**
  * Barrow Quest Engine
  * - GPS proximity trigger
- * - AR verify gating (manual verify supported)
+ * - No AR gate before missions
+ * - No AI verify
  * - Mode selection
- * - Manual reward assignment for ALL modes
- * - AI Verify disabled for stability
+ * - Manual reward assignment for all modes
  * - Stable option button wiring
  * - Experience filter support (Park / Docks / Full Barrow)
  */
-
-const AI_VERIFY_ENABLED = false;
 
 // ===== CONFIG =====
 const ENTER_RADIUS_M_DEFAULT = 30;
@@ -22,7 +19,7 @@ const PASS_BONUS_COINS = 10;
 const CAPTURE_BONUS_COINS = 50;
 
 // ===== STATE =====
-let state = JSON.parse(localStorage.getItem("bq_master_v3")) || {
+let state = JSON.parse(localStorage.getItem("bq_master_v4")) || {
   k: 0,
   p: 0,
   khyl: 0,
@@ -51,18 +48,13 @@ state.session.qaSalt = state.session.qaSalt ?? Date.now();
 state.session.missionsCompleted = state.session.missionsCompleted ?? 0;
 state.session.rank = state.session.rank ?? 1;
 
-// settings defaults
 state.settings = state.settings || {};
 state.settings = {
   voiceRate: state.settings.voiceRate ?? 1.0,
   sfxVol: state.settings.sfxVol ?? 80,
   enterRadiusM: state.settings.enterRadiusM ?? ENTER_RADIUS_M_DEFAULT,
-  arMode: state.settings.arMode ?? "easy",
   character: state.settings.character ?? "hero_duo",
   zoomUI: state.settings.zoomUI ?? false,
-  rotMode: state.settings.rotMode ?? "needle",
-  rotPower: state.settings.rotPower ?? 85,
-  rotSmooth: state.settings.rotSmooth ?? 0.55,
 };
 
 // ===== DOM =====
@@ -113,38 +105,33 @@ function getRank() {
 const CHARACTERS = {
   hero_duo: {
     label: "Hero Duo",
-    iconHtml: `<div style="font-size:50px">HD</div>`,
+    iconHtml: `<div style="font-size:42px">🧭</div>`,
     pointsMult: 1.0,
     healthMult: 1.0,
-    arBonus: 1.0,
   },
   ninja: {
     label: "Ninja Scout",
-    iconHtml: `<div style="font-size:50px">N</div>`,
+    iconHtml: `<div style="font-size:42px">🥷</div>`,
     pointsMult: 1.1,
     healthMult: 0.9,
-    arBonus: 0.9,
   },
   wizard: {
     label: "Wizard Guide",
-    iconHtml: `<div style="font-size:50px">W</div>`,
+    iconHtml: `<div style="font-size:42px">🧙‍♂️</div>`,
     pointsMult: 1.0,
     healthMult: 1.0,
-    arBonus: 1.25,
   },
   robot: {
     label: "Robo Ranger",
-    iconHtml: `<div style="font-size:50px">R</div>`,
+    iconHtml: `<div style="font-size:42px">🤖</div>`,
     pointsMult: 1.2,
     healthMult: 1.15,
-    arBonus: 0.85,
   },
   pirate: {
     label: "Pirate Captain",
-    iconHtml: `<div style="font-size:50px">P</div>`,
+    iconHtml: `<div style="font-size:42px">🏴‍☠️</div>`,
     pointsMult: 1.15,
     healthMult: 1.05,
-    arBonus: 0.95,
   },
 };
 
@@ -160,7 +147,6 @@ const PIN_RULES = {
     type: "foundation",
     captureNeed: 2,
     requiredModes: ["quiz", "history"],
-    allowedModes: null,
     cooldownMin: 5,
     banner: "Home Base: Complete QUIZ + HISTORY to establish the link.",
   },
@@ -169,9 +155,8 @@ const PIN_RULES = {
     type: "reflection",
     captureNeed: 3,
     requiredModes: ["history", "family", "activity"],
-    allowedModes: null,
     cooldownMin: 15,
-    banner: "Cenotaph: HISTORY + FAMILY + ACTIVITY required. Respect node.",
+    banner: "Cenotaph: HISTORY + FAMILY + ACTIVITY required.",
   },
   100: {
     label: "FINAL BOSS ACTIVE",
@@ -215,6 +200,7 @@ let cur = null;
 let activeMarkers = {};
 let hero = null;
 let map = null;
+let activeTask = null;
 
 // ===== HEALTH TRACKER =====
 let healthActive = false;
@@ -222,32 +208,18 @@ let healthLast = null;
 let healthMeters = 0;
 let healthTarget = 0;
 
-// ===== AR =====
-let arStream = null;
-
-// ===== AI VERIFY STATE (disabled) =====
-let ai = {
-  running: false,
-};
-
 // ===== VOICE PACK =====
 const VOICE_PACK = {
   kid: {
     welcome: "Hey explorers! Welcome back!",
     nearPin: "Nice! You found a mission spot. Tap the lightning button!",
-    verified: "Verified! Nice one!",
-    tryAgain: "Nearly! Try again.",
     correct: "Brilliant! You got it right!",
-    reward: "Reward ready.",
     capture: "Node captured! Great work!",
   },
   teen: {
     welcome: "Alright. Mission time.",
     nearPin: "You're in range. Hit the lightning button.",
-    verified: "Verified.",
-    tryAgain: "Close. Run it again.",
     correct: "Correct.",
-    reward: "Reward ready.",
     capture: "Node captured.",
   },
 };
@@ -327,25 +299,6 @@ function activeParticipantLabel() {
   return "Both";
 }
 
-function awardPointsTo(target, amount) {
-  const gain = Math.max(0, Math.round(amount || 0));
-  if (!gain) return;
-
-  if (target === "kylan") state.k += gain;
-  else if (target === "piper") state.p += gain;
-  else if (target === "khyl") state.khyl += gain;
-  else if (target === "both") {
-    state.k += gain;
-    state.p += gain;
-  }
-
-  save();
-  playSuccessSfx();
-  pulseCoinsHud();
-  burstEmoji(10, "COIN");
-  showRewardPopup(`+${gain} COINS`, `${target.toUpperCase()} awarded!`);
-}
-
 function showRewardPanel(show = true) {
   const panel = $("reward-panel");
   if (panel) panel.style.display = show ? "block" : "none";
@@ -421,7 +374,7 @@ function ensureRewardLayer() {
   return fx;
 }
 
-function burstEmoji(count = 12, emoji = "STAR") {
+function burstEmoji(count = 12, emoji = "✨") {
   const layer = ensureRewardLayer();
   const rect = document.body.getBoundingClientRect();
   for (let i = 0; i < count; i++) {
@@ -501,13 +454,13 @@ function pulseCoinsHud() {
 
 function celebrateCorrect(fact = "") {
   playSuccessSfx();
-  burstEmoji(14, "STAR");
+  burstEmoji(14, "✨");
   showRewardPopup("CORRECT!", fact || "Great job, explorer!");
 }
 
 function celebrateCapture(mins) {
   playCaptureSfx();
-  burstEmoji(18, "TROPHY");
+  burstEmoji(18, "🏆");
   showRewardPopup("NODE CAPTURED!", `Reawakens in ${mins} minutes`);
   speak(voiceLine("capture"));
 }
@@ -528,9 +481,6 @@ function save() {
       parseInt(r.value, 10) || state.settings.enterRadiusM;
   }
 
-  const ar = $("ar-mode");
-  if (ar) state.settings.arMode = ar.value || state.settings.arMode;
-
   const cs = $("char-select");
   if (cs) state.settings.character = cs.value || state.settings.character;
 
@@ -549,7 +499,7 @@ function save() {
     state.activeParticipant = ps.value || state.activeParticipant || "both";
   }
 
-  localStorage.setItem("bq_master_v3", JSON.stringify(state));
+  localStorage.setItem("bq_master_v4", JSON.stringify(state));
 
   if ($("h-k")) $("h-k").innerText = state.k;
   if ($("h-p")) $("h-p").innerText = state.p;
@@ -574,8 +524,20 @@ function save() {
 }
 
 function updateRankHud() {
-  const existing = $("rank-hud");
+  let existing = $("rank-hud");
+  if (!existing) {
+    const coinHud = $("coin-hud");
+    if (coinHud) {
+      existing = document.createElement("div");
+      existing.id = "rank-hud";
+      existing.style.marginTop = "6px";
+      existing.style.fontSize = "12px";
+      existing.style.color = "var(--gold)";
+      coinHud.appendChild(existing);
+    }
+  }
   if (!existing) return;
+
   const next = RANK_TABLE.find((x) => x.rank > getRank());
   existing.innerText = next
     ? `RANK ${getRank()} | MISSIONS ${state.session.missionsCompleted} | NEXT ${next.missions}`
@@ -593,7 +555,6 @@ function toggleHP(unit) {
 function nodeState(id) {
   if (!state.nodes[id]) {
     state.nodes[id] = {
-      arVerified: false,
       completedModes: [],
       cooldownUntil: 0,
     };
@@ -687,7 +648,7 @@ function initPins() {
   getVisiblePins().forEach((p) => {
     if (!isOnCooldown(p.id)) {
       const m = L.marker(p.l, {
-        icon: L.divIcon({ className: "marker-logo", html: p.i }),
+        icon: L.divIcon({ className: "marker-logo", html: p.i || "📍" }),
       }).addTo(map);
       activeMarkers[p.id] = m;
     }
@@ -696,7 +657,6 @@ function initPins() {
   save();
 }
 
-// ===== GPS WATCH =====
 function startGPSWatcher() {
   map.locate({ watch: true, enableHighAccuracy: true });
 
@@ -736,9 +696,9 @@ function startGPSWatcher() {
       }
     }
 
-    const visiblePins = getVisiblePins();
-    const near = visiblePins.find(
-      (p) => map.distance(e.latlng, p.l) < getEnterRadiusM() && !isOnCooldown(p.id)
+    const near = getVisiblePins().find(
+      (p) =>
+        map.distance(e.latlng, p.l) < getEnterRadiusM() && !isOnCooldown(p.id)
     );
 
     if (near) {
@@ -833,20 +793,6 @@ function wireHUD() {
     });
   }
 
-  const arMode = $("ar-mode");
-  const arLabel = $("ar-label");
-  if (arMode) {
-    arMode.value = state.settings.arMode || "easy";
-    if (arLabel) arLabel.innerText = (arMode.value || "easy").toUpperCase();
-    arMode.addEventListener("change", () => {
-      state.settings.arMode = arMode.value || "easy";
-      if (arLabel) {
-        arLabel.innerText = (state.settings.arMode || "easy").toUpperCase();
-      }
-      save();
-    });
-  }
-
   const charSel = $("char-select");
   if (charSel) {
     charSel.value = state.settings.character || "hero_duo";
@@ -910,14 +856,12 @@ function wireHUD() {
     Object.keys(state.nodes || {}).forEach((id) => {
       state.nodes[id].cooldownUntil = 0;
       state.nodes[id].completedModes = [];
-      state.nodes[id].arVerified = false;
     });
     initPins();
     save();
     speak("All nodes reset.");
   });
 
-  // reward buttons
   onClick("btn-award-kylan", () => {
     const amount = getPendingRewardAmount();
     awardPointsTo("kylan", amount);
@@ -946,21 +890,11 @@ function wireHUD() {
     showRewardPanel(false);
   });
 
-  // Gallery
-  onClick("btn-gallery-close", () => toggleM("gallery-modal", false));
-  onClick("btn-gallery-refresh", renderGallery);
-  onClick("btn-gallery-clear", async () => {
-    await clearPhotos();
-    renderGallery();
-    speak("Gallery cleared.");
-  });
-
   onClick("btn-test", () => {
     speak("Systems online. GPS ready.");
-    openGallery();
+    showRewardPopup("SYSTEMS OK", "AI and AR start gate removed.");
   });
 
-  // start screen choices
   onClick("btn-start", () => {
     initExperienceFromStart();
     initPins();
@@ -991,45 +925,6 @@ function initExperienceFromStart() {
   } else {
     state.currentExperience = "full";
   }
-}
-
-// ===== AI disabled helpers =====
-function openAI() {
-  showRewardPopup("AI VERIFY OFF", "Activity will use normal completion only.");
-}
-
-async function renderGallery() {
-  const wrap = $("gallery-list");
-  if (!wrap) return;
-  wrap.innerHTML = "<div style='opacity:.8'>Loading...</div>";
-
-  const rows = await listPhotos(200);
-  if (!rows.length) {
-    wrap.innerHTML =
-      "<div style='opacity:.8'>No saved photos yet.</div>";
-    return;
-  }
-
-  wrap.innerHTML = rows
-    .map((r) => {
-      const d = new Date(r.ts);
-      const when = d.toLocaleString();
-      const url = URL.createObjectURL(r.blob);
-      return `
-        <div style="padding:10px;border:1px solid #333;border-radius:14px;margin:10px 0;background:#111;">
-          <div style="font-weight:bold;">${r.pinName || "Unknown Pin"} - ${
-        r.taskLabel || "Pose"
-      }</div>
-          <div style="opacity:.85;font-size:12px;margin-top:4px;">${when}</div>
-          <img src="${url}" style="width:100%;margin-top:10px;border-radius:12px;border:1px solid #222;" />
-        </div>`;
-    })
-    .join("");
-}
-
-function openGallery() {
-  toggleM("gallery-modal", true);
-  renderGallery();
 }
 
 // ===== QUEST OPEN/CLOSE =====
@@ -1069,17 +964,11 @@ function openQuest() {
     if ($("quest-status")) {
       $("quest-status").innerText = `STATUS: CAPTURED (reawakens in ~${mins} min)`;
     }
-    if ($("btn-ar-open")) $("btn-ar-open").style.display = "none";
-    disableModeTiles(true);
-  } else if (!ns.arVerified) {
-    if ($("quest-status")) $("quest-status").innerText = "STATUS: NEEDS AR VERIFY";
-    if ($("btn-ar-open")) $("btn-ar-open").style.display = "block";
     disableModeTiles(true);
   } else {
     if ($("quest-status")) {
-      $("quest-status").innerText = `STATUS: VERIFIED (Complete ${effectiveNeed} modes to capture)`;
+      $("quest-status").innerText = `STATUS: READY (Complete ${effectiveNeed} modes to capture)`;
     }
-    if ($("btn-ar-open")) $("btn-ar-open").style.display = "none";
     disableModeTiles(false);
 
     const allowed = allowedModesFor(cur);
@@ -1099,7 +988,7 @@ function openQuest() {
   }
 
   updateCaptureHud();
-  speak("Node discovered. Select mode or verify.");
+  speak("Node discovered. Select mode.");
 }
 
 function closeQuest() {
@@ -1112,70 +1001,6 @@ function disableModeTiles(disabled) {
     tile.style.opacity = disabled ? "0.35" : "1";
     tile.style.pointerEvents = disabled ? "none" : "auto";
   });
-}
-
-// ===== AR VERIFY =====
-function wireAR() {
-  onClick("btn-ar-open", startARVerify);
-  onClick("btn-ar-close", () => stopARVerify(true));
-  onClick("btn-ar-stop", () => stopARVerify(false));
-  onClick("btn-ar-manual", completeARVerify);
-}
-
-async function startARVerify() {
-  if (!cur) return;
-
-  toggleM("ar-modal", true);
-  if ($("ar-hint")) {
-    $("ar-hint").innerText = cur?.ar?.hint || "Face the landmark and scan.";
-  }
-  if ($("ar-readout")) $("ar-readout").innerText = "Heading: --";
-
-  try {
-    arStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "environment" },
-      audio: false,
-    });
-    if ($("ar-video")) $("ar-video").srcObject = arStream;
-  } catch {
-    if ($("ar-hint")) {
-      $("ar-hint").innerText +=
-        " (Camera blocked; manual verify still possible.)";
-    }
-  }
-
-  speak("AR verification started. Slowly turn and face the landmark.");
-}
-
-function stopARVerify(closeModal) {
-  if (arStream) {
-    arStream.getTracks().forEach((t) => t.stop());
-    arStream = null;
-  }
-  if (closeModal) toggleM("ar-modal", false);
-}
-
-function completeARVerify() {
-  if (!cur) return;
-  const ns = nodeState(cur.id);
-  if (ns.arVerified) return;
-
-  ns.arVerified = true;
-  save();
-  stopARVerify(true);
-  playSuccessSfx();
-  burstEmoji(10, "CAM");
-  showRewardPopup("VERIFIED!", "Node unlocked");
-  speak("AR verified. Node unlocked.");
-
-  if ($("quest-status")) {
-    $("quest-status").innerText = `STATUS: VERIFIED (Complete ${getEffectiveCaptureNeed(
-      cur
-    )} modes to capture)`;
-  }
-
-  if ($("btn-ar-open")) $("btn-ar-open").style.display = "none";
-  disableModeTiles(false);
 }
 
 // ===== MODE LAUNCH =====
@@ -1191,8 +1016,6 @@ function wireModes() {
     });
   });
 }
-
-let activeTask = null;
 
 function difficultyTier() {
   return state.dp <= 4 ? "kid" : "adult";
@@ -1215,11 +1038,6 @@ function launchMode(mode) {
   if (!cur) return;
 
   const ns = nodeState(cur.id);
-
-  if (!ns.arVerified) {
-    speak("Verification required first.");
-    return;
-  }
 
   const allowed = allowedModesFor(cur);
   if (allowed && !allowed.includes(mode)) {
@@ -1292,18 +1110,6 @@ function renderOptions(task) {
 function selectOption(idx) {
   if (!activeTask) return;
 
-  if (
-    AI_VERIFY_ENABLED &&
-    activeTask.mode === "activity" &&
-    activeTask.meta?.ai === true
-  ) {
-    if (idx === 0) {
-      toggleM("task-modal", false);
-      openAI();
-      return;
-    }
-  }
-
   if (activeTask.mode === "health") {
     if (idx === 0) {
       const char = getCharacter();
@@ -1338,7 +1144,8 @@ function selectOption(idx) {
 
       if ($("task-feedback")) {
         $("task-feedback").style.display = "block";
-        $("task-feedback").innerText = activeTask.fact || "Completed. Reward ready.";
+        $("task-feedback").innerText =
+          activeTask.fact || "Completed. Reward ready.";
       }
 
       celebrateCorrect(activeTask.fact || "Completed.");
@@ -1456,7 +1263,6 @@ function finishMode() {
 function captureNode(pin) {
   const ns = nodeState(pin.id);
   ns.cooldownUntil = Date.now() + getEffectiveCooldownMs(pin);
-  ns.arVerified = false;
   ns.completedModes = [];
   state.session.qaSalt = Date.now();
 
@@ -1522,14 +1328,12 @@ function renderHomeLog() {
     const doneCount = ns.completedModes?.length || 0;
 
     if (onCd) locked++;
-    if (doneCount > 0 || ns.arVerified || onCd) completed++;
+    if (doneCount > 0 || onCd) completed++;
 
     let status = "Fresh";
     if (onCd) {
       const mins = Math.ceil((ns.cooldownUntil - now) / 60000);
       status = `Captured (back in ~${mins}m)`;
-    } else if (ns.arVerified) {
-      status = `Verified (${doneCount}/${getEffectiveCaptureNeed(p)} modes)`;
     } else if (doneCount > 0) {
       status = `Progress (${doneCount}/${getEffectiveCaptureNeed(p)} modes)`;
     }
@@ -1550,27 +1354,10 @@ function renderHomeLog() {
     .join("");
 }
 
-// ===== SMALL UI ADDITIONS =====
-function injectRankHud() {
-  if ($("rank-hud")) return;
-  const coinHud = $("coin-hud");
-  if (!coinHud) return;
-
-  const div = document.createElement("div");
-  div.id = "rank-hud";
-  div.style.marginTop = "6px";
-  div.style.fontSize = "12px";
-  div.style.color = "var(--gold)";
-  coinHud.appendChild(div);
-  updateRankHud();
-}
-
 // ===== BOOT =====
 function boot() {
   try {
     wireHUD();
-    wireAR();
-    injectRankHud();
     initMap();
     wireModes();
     updateRank();
