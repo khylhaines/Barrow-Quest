@@ -1,781 +1,143 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#111111" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="theme-color" content="#000000" />
-    <title>Barrow Quest: Elite Master Hub</title>
+    <title>Barrow Quest</title>
 
     <link rel="manifest" href="./manifest.json" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="./styles.css" />
-
-    <style>
-      .modal-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 12px;
-      }
-      .modal-header h2,
-      .modal-header h1 {
-        margin: 0;
-      }
-      .close-x {
-        width: 44px;
-        height: 44px;
-        border-radius: 14px;
-        border: 1px solid #333;
-        background: #111;
-        color: #fff;
-        font-size: 20px;
-        line-height: 44px;
-        text-align: center;
-        cursor: pointer;
-      }
-      .settings-card {
-        border: 1px solid #333;
-        background: rgba(255, 255, 255, 0.04);
-        border-radius: 18px;
-        padding: 14px;
-        margin: 12px 0;
-        text-align: left;
-      }
-      .settings-card h3 {
-        margin: 0 0 10px;
-      }
-      .settings-row {
-        display: grid;
-        gap: 10px;
-      }
-      .settings-line {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        font-family: monospace;
-        font-size: 12px;
-        opacity: 0.95;
-      }
-      .settings-line strong {
-        font-family: inherit;
-      }
-      .settings-card input[type="range"],
-      .settings-card select,
-      .setting-row select {
-        width: 100%;
-      }
-      .settings-mini {
-        opacity: 0.8;
-        font-size: 12px;
-        margin-top: 6px;
-      }
-      .start-hero {
-        text-align: center;
-        padding: 10px 0 2px;
-      }
-      .start-logo {
-        font-size: 46px;
-        line-height: 1;
-        margin-bottom: 10px;
-      }
-      .start-sub {
-        opacity: 0.85;
-        font-size: 13px;
-        margin-top: 6px;
-      }
-      .pill-row {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-        justify-content: center;
-        margin-top: 10px;
-      }
-      .pill {
-        border: 1px solid #333;
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 999px;
-        padding: 10px 14px;
-        cursor: pointer;
-        font-family: monospace;
-        font-size: 12px;
-      }
-      .pill.active {
-        border-color: var(--gold);
-        box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.12) inset;
-      }
-      .start-grid {
-        display: grid;
-        gap: 12px;
-        margin-top: 14px;
-      }
-      .start-card {
-        border: 1px solid #333;
-        background: rgba(255, 255, 255, 0.04);
-        border-radius: 18px;
-        padding: 14px;
-        text-align: left;
-      }
-      .start-card h3 {
-        margin: 0 0 10px;
-      }
-      .start-mini {
-        opacity: 0.8;
-        font-size: 12px;
-        margin-top: 8px;
-      }
-      .start-actions {
-        display: grid;
-        gap: 10px;
-        margin-top: 14px;
-      }
-    </style>
   </head>
-
   <body>
     <div id="coin-hud">
-      <div style="color: var(--kylan)">
-        KYLAN: <span id="h-k">0</span> 🪙
-        <span id="hp-k-tag" class="hp-status hp-off">OFF</span>
-      </div>
-      <div style="color: var(--piper)">
-        PIPER: <span id="h-p">0</span> 🪙
-        <span id="hp-p-tag" class="hp-status hp-off">OFF</span>
-      </div>
-      <div style="color: var(--parent)">KHYL: <span id="h-me">0</span> 🪙</div>
-      <div
-        id="capture-hud"
-        style="margin-top: 10px; font-size: 12px; color: var(--gold)"
-      >
-        CAPTURE: -
-      </div>
+      <div>KYLAN: <span id="h-k">0</span> coins</div>
+      <div>PIPER: <span id="h-p">0</span> coins</div>
+      <div>KHYL: <span id="h-me">0</span> coins</div>
+      <div id="rank-hud">RANK 1</div>
+      <div id="capture-hud">CAPTURE: -</div>
     </div>
 
     <div id="map"></div>
-
     <button id="action-trigger" aria-label="Action">⚡</button>
 
-    <div class="hud-dock" aria-label="Bottom Controls">
-      <button id="btn-home" class="hud-btn" aria-label="Home">🏠</button>
-      <button id="btn-commander" class="hud-btn" aria-label="Commander">🎮</button>
-      <button id="btn-settings" class="hud-btn" aria-label="Settings">⚙️</button>
+    <div class="hud-dock">
+      <button id="btn-home" class="hud-btn">Home</button>
+      <button id="btn-settings" class="hud-btn">Settings</button>
     </div>
 
-    <div id="start-modal" class="full-modal" style="display: block">
+    <div id="start-modal" class="full-modal" style="display:block;">
       <div class="modal-header">
-        <h2 style="color: var(--gold)">BARROW QUEST</h2>
-        <button
-          type="button"
-          class="close-x"
-          id="btn-start-close-x"
-          aria-label="Close Start"
-        >
-          ✕
-        </button>
+        <h2>BARROW QUEST</h2>
+        <button id="btn-start-close-x" class="close-x">✕</button>
       </div>
 
-      <div class="start-hero">
-        <div class="start-logo">🗺️⚔️</div>
-        <div style="font-weight: bold; font-size: 16px">
-          Choose your adventure
-        </div>
-        <div class="start-sub">
-          Kids and adults can play different vibes — same map, better fun.
+      <div class="start-card">
+        <h3>Mode</h3>
+        <div class="pill-row">
+          <button class="pill active" id="pill-kids">KIDS</button>
+          <button class="pill" id="pill-teen">TEEN / ADULT</button>
         </div>
       </div>
 
-      <div class="start-grid">
-        <div class="start-card">
-          <h3>MODE</h3>
-          <div class="pill-row" role="group" aria-label="Player mode">
-            <button class="pill active" id="pill-kids" type="button">
-              KIDS
-            </button>
-            <button class="pill" id="pill-teen" type="button">
-              TEEN / ADULT
-            </button>
-          </div>
-          <div class="start-mini">
-            This changes question tone and activity vibe.
-          </div>
-        </div>
-
-        <div class="start-card">
-          <h3>EXPERIENCE</h3>
-          <div class="pill-row" role="group" aria-label="Experience">
-            <button class="pill active" id="pill-park" type="button">
-              BARROW PARK
-            </button>
-            <button class="pill" id="pill-docks" type="button">
-              THE DOCKS
-            </button>
-            <button class="pill" id="pill-full" type="button">
-              FULL BARROW
-            </button>
-          </div>
-          <div class="start-mini">This filters which pins show on the map.</div>
-        </div>
-
-        <div class="start-card">
-          <h3>READY?</h3>
-          <div class="start-actions">
-            <button class="win-btn" id="btn-start" type="button">
-              START ADVENTURE
-            </button>
-            <button
-              class="win-btn"
-              id="btn-open-settings"
-              type="button"
-              style="background: #222; color: #fff"
-            >
-              SETTINGS
-            </button>
-          </div>
-          <div class="start-mini">
-            You can always reopen this from the Home button later.
-          </div>
+      <div class="start-card">
+        <h3>Experience</h3>
+        <div class="pill-row">
+          <button class="pill active" id="pill-park">BARROW PARK</button>
+          <button class="pill" id="pill-docks">THE DOCKS</button>
+          <button class="pill" id="pill-full">FULL BARROW</button>
         </div>
       </div>
 
-      <button
-        class="win-btn"
-        id="btn-start-close"
-        style="background: #222; color: #fff; margin-top: 14px"
-      >
-        CLOSE
-      </button>
+      <div class="start-card">
+        <button class="win-btn" id="btn-start">START ADVENTURE</button>
+        <button class="win-btn dark" id="btn-open-settings">SETTINGS</button>
+      </div>
     </div>
 
-    <div id="commander-hub" class="full-modal">
+    <div id="home-modal" class="full-modal">
       <div class="modal-header">
-        <h1 style="color: var(--parent)">LEAD COMMANDER HUB</h1>
-        <button
-          type="button"
-          class="close-x"
-          id="btn-close-commander-x"
-          aria-label="Close Commander"
-        >
-          ✕
-        </button>
+        <h2>HOME BASE LOG</h2>
+        <button id="btn-home-close-x" class="close-x">✕</button>
+      </div>
+      <div id="home-summary"></div>
+      <div id="home-list"></div>
+      <button class="win-btn dark" id="btn-home-close">CLOSE</button>
+    </div>
+
+    <div id="settings-modal" class="full-modal">
+      <div class="modal-header">
+        <h2>SYSTEM CONFIG</h2>
+        <button id="btn-close-settings-x" class="close-x">✕</button>
       </div>
 
-      <div class="setting-row">
-        <h3>BATTLE MODS</h3>
-        <div style="display: flex; gap: 10px">
-          <button
-            type="button"
-            class="win-btn"
-            style="background: var(--kylan); color: white"
-            id="btn-hp-k"
-          >
-            LINK KYLAN
-          </button>
-          <button
-            type="button"
-            class="win-btn"
-            style="background: var(--piper); color: white"
-            id="btn-hp-p"
-          >
-            LINK PIPER
-          </button>
-        </div>
-      </div>
-
-      <div class="setting-row">
-        <h3>ACTIVE PLAYER / REWARD TARGET</h3>
+      <div class="settings-card">
+        <h3>Reward Target</h3>
         <select id="participant-select">
           <option value="both">BOTH KIDS</option>
           <option value="kylan">KYLAN ONLY</option>
           <option value="piper">PIPER ONLY</option>
           <option value="khyl">KHYL ONLY</option>
         </select>
-        <div class="settings-mini">
-          This sets the default active player, but rewards are still manually assigned.
-        </div>
-      </div>
-
-      <div class="setting-row">
-        <h3>LAW OF POLARITY (DIFFICULTY)</h3>
-        <p>
-          KYLAN LVL:
-          <input type="range" id="dk" min="1" max="10" value="7" />
-        </p>
-        <p>
-          PIPER LVL:
-          <input type="range" id="dp" min="1" max="10" value="3" />
-        </p>
-        <button type="button" class="win-btn" id="btn-swap">
-          SWAP POLARITY
-        </button>
-      </div>
-
-      <div class="setting-row">
-        <h3>GAME RULES</h3>
-
-        <p style="margin: 10px 0 6px">
-          Cooldown minutes:
-          <span id="cooldown-label">10</span> min
-        </p>
-        <input type="range" id="cooldown-min" min="1" max="60" value="10" />
-
-        <p style="margin: 14px 0 6px">
-          Capture modes needed:
-          <span id="capture-label">3</span>
-        </p>
-        <input type="range" id="capture-need" min="1" max="6" value="3" />
-
-        <button
-          type="button"
-          class="win-btn"
-          id="btn-respawn-nodes"
-          style="background: #444; color: #fff; margin-top: 14px"
-        >
-          RESPAWN ALL NODES
-        </button>
-      </div>
-
-      <button
-        type="button"
-        class="win-btn"
-        id="btn-close-commander"
-        style="background: #222; color: #fff; margin-top: 16px"
-      >
-        EXIT HUB
-      </button>
-    </div>
-
-    <div id="home-modal" class="full-modal">
-      <div class="modal-header">
-        <h2 style="color: var(--gold)">HOME BASE LOG</h2>
-        <button
-          type="button"
-          class="close-x"
-          id="btn-home-close-x"
-          aria-label="Close Home"
-        >
-          ✕
-        </button>
-      </div>
-
-      <div style="text-align: left; margin: 15px 0; font-family: monospace">
-        <div id="home-summary"></div>
-      </div>
-
-      <div id="home-list" style="text-align: left"></div>
-
-      <button
-        class="win-btn"
-        id="btn-home-close"
-        style="background: #222; color: white"
-      >
-        CLOSE
-      </button>
-    </div>
-
-    <div id="settings-modal" class="full-modal">
-      <div class="modal-header">
-        <h2 style="color: var(--gold)">SYSTEM CONFIG</h2>
-        <button
-          type="button"
-          class="close-x"
-          id="btn-close-settings-x"
-          aria-label="Close Settings"
-        >
-          ✕
-        </button>
       </div>
 
       <div class="settings-card">
-        <h3>AUDIO</h3>
-
-        <div class="settings-line">
-          <span>AI Voice Pitch</span>
-          <strong><span id="pitch-label">1.0</span>x</strong>
-        </div>
-        <input
-          type="range"
-          min="0.5"
-          max="1.5"
-          step="0.1"
-          id="v-pitch"
-          value="1.0"
-        />
-
-        <div class="settings-mini">
-          Pitch changes how high or low the voice sounds.
-        </div>
-
-        <div style="margin-top: 14px" class="settings-line">
-          <span>Voice Speed</span>
-          <strong><span id="rate-label">1.0</span>x</strong>
-        </div>
-        <input
-          type="range"
-          min="0.6"
-          max="1.4"
-          step="0.1"
-          id="v-rate"
-          value="1.0"
-        />
-
-        <div style="margin-top: 14px" class="settings-line">
-          <span>SFX Volume</span>
-          <strong><span id="sfx-label">80</span>%</strong>
-        </div>
-        <input
-          type="range"
-          min="0"
-          max="100"
-          step="5"
-          id="sfx-vol"
-          value="80"
-        />
+        <h3>Enter Radius</h3>
+        <div><span id="radius-label">30</span>m</div>
+        <input type="range" id="enter-radius" min="10" max="80" step="5" value="30" />
       </div>
 
       <div class="settings-card">
-        <h3>DISPLAY</h3>
-        <div class="settings-row">
-          <button class="win-btn" id="btn-night">NIGHT VISION</button>
-
-          <div class="settings-line">
-            <span>Map Zoom Buttons</span>
-            <strong><span id="zoomui-label">OFF</span></strong>
-          </div>
-
-          <button
-            class="win-btn"
-            id="btn-zoom-ui"
-            style="background: #333; color: #fff"
-          >
-            TOGGLE ZOOM UI
-          </button>
-        </div>
+        <h3>Capture Need</h3>
+        <div><span id="capture-label">3</span> modes</div>
+        <input type="range" id="capture-need" min="1" max="6" step="1" value="3" />
       </div>
 
-      <div class="settings-card">
-        <h3>GAMEPLAY</h3>
-
-        <div class="settings-line">
-          <span>Enter Radius</span>
-          <strong><span id="radius-label">30</span>m</strong>
-        </div>
-        <input
-          type="range"
-          min="10"
-          max="80"
-          step="5"
-          id="enter-radius"
-          value="30"
-        />
-
-        <div class="settings-line" style="margin-top: 12px">
-          <span>AR Strictness</span>
-          <strong><span id="ar-label">EASY</span></strong>
-        </div>
-        <select id="ar-mode">
-          <option value="easy" selected>EASY</option>
-          <option value="normal">NORMAL</option>
-          <option value="hard">HARD</option>
-        </select>
-      </div>
-
-      <div class="settings-card">
-        <h3>CHARACTER SELECT</h3>
-        <select id="char-select">
-          <option value="hero_duo" selected>Hero Duo</option>
-          <option value="ninja">Ninja Scout</option>
-          <option value="wizard">Wizard Guide</option>
-          <option value="robot">Robo Ranger</option>
-          <option value="pirate">Pirate Captain</option>
-        </select>
-        <div class="settings-mini">This changes the GPS marker and bonuses.</div>
-      </div>
-
-      <button class="win-btn" id="btn-test">TEST SYSTEMS / OPEN GALLERY</button>
-      <button class="win-btn" id="btn-close-settings">CLOSE</button>
+      <button class="win-btn dark" id="btn-close-settings">CLOSE</button>
     </div>
 
     <div id="quest-modal" class="full-modal">
-      <h1 id="q-name" style="color: var(--gold)">ZONE</h1>
+      <h1 id="q-name">ZONE</h1>
+      <div id="quest-status">STATUS: -</div>
 
-      <div id="mode-banner" class="zone-banner" style="display: none"></div>
-      <div id="boss-banner" class="boss-banner" style="display: none"></div>
-
-      <div
-        id="quest-status"
-        style="margin: 10px 0; font-size: 13px; color: #fff"
-      >
-        STATUS: -
+      <div class="mission-grid">
+        <div class="m-tile" data-mode="quiz">QUIZ</div>
+        <div class="m-tile" data-mode="battle">BATTLE</div>
+        <div class="m-tile" data-mode="history">HISTORY</div>
+        <div class="m-tile" data-mode="logic">LOGIC</div>
+        <div class="m-tile" data-mode="speed">SPEED</div>
+        <div class="m-tile" data-mode="health">HEALTH</div>
+        <div class="m-tile" data-mode="activity">ACTIVITY</div>
+        <div class="m-tile" data-mode="family">FAMILY</div>
       </div>
 
-      <button
-        class="win-btn"
-        id="btn-ar-open"
-        style="
-          background: #111;
-          color: var(--gold);
-          border: 2px solid var(--gold);
-        "
-      >
-        AR VERIFY (SCAN)
-      </button>
-
-      <div class="mission-grid" style="margin-top: 15px">
-        <div class="m-tile" data-mode="quiz"><span>❓</span>QUIZ</div>
-        <div class="m-tile" data-mode="battle"><span>⚔️</span>BATTLE</div>
-        <div class="m-tile" data-mode="history"><span>📜</span>HISTORY</div>
-        <div class="m-tile" data-mode="logic"><span>🧩</span>LOGIC</div>
-        <div class="m-tile" data-mode="speed"><span>⚡</span>SPEED</div>
-        <div class="m-tile" data-mode="health"><span>🏃</span>HEALTH</div>
-        <div class="m-tile" data-mode="activity"><span>🎯</span>ACTIVITY</div>
-        <div class="m-tile" data-mode="family"><span>👨‍👩‍👧</span>FAMILY</div>
-      </div>
-
-      <button
-        class="win-btn"
-        style="background: #222; color: white"
-        id="btn-close-quest"
-      >
-        CLOSE
-      </button>
-    </div>
-
-    <div id="ar-modal" class="full-modal">
-      <h1 style="color: var(--gold)">AR VERIFY</h1>
-      <p id="ar-hint" style="opacity: 0.9">Face the landmark and scan.</p>
-
-      <div style="margin: 12px 0; text-align: left">
-        <div
-          id="ar-readout"
-          style="font-family: monospace; font-size: 13px; color: var(--neon)"
-        >
-          Heading: --
-        </div>
-        <div style="font-size: 12px; opacity: 0.85; margin-top: 6px">
-          Slowly turn in a circle until it verifies.
-        </div>
-      </div>
-
-      <video
-        id="ar-video"
-        autoplay
-        playsinline
-        muted
-        style="
-          width: 100%;
-          border-radius: 18px;
-          border: 2px solid #333;
-          background: #000;
-        "
-      ></video>
-
-      <div style="display: flex; gap: 10px; margin-top: 12px">
-        <button
-          class="win-btn"
-          id="btn-ar-stop"
-          style="background: #333; color: #fff"
-        >
-          STOP
-        </button>
-        <button
-          class="win-btn"
-          id="btn-ar-manual"
-          style="background: var(--gold); color: #000"
-        >
-          I SEE IT
-        </button>
-      </div>
-
-      <button
-        class="win-btn"
-        id="btn-ar-close"
-        style="background: #222; color: #fff; margin-top: 15px"
-      >
-        CLOSE
-      </button>
+      <button class="win-btn dark" id="btn-close-quest">CLOSE</button>
     </div>
 
     <div id="task-modal" class="full-modal">
-      <h1 id="task-title" style="color: var(--gold)">MISSION</h1>
+      <h1 id="task-title">MISSION</h1>
+      <div class="task-card">
+        <p id="task-desc"></p>
+        <div id="task-options"></div>
 
-      <div
-        style="
-          border: 3px solid var(--gold);
-          padding: 20px;
-          border-radius: 20px;
-          margin: 25px 0;
-          background: rgba(255, 255, 255, 0.05);
-          text-align: left;
-        "
-      >
-        <p id="task-desc" style="font-size: 1.2rem; font-weight: bold"></p>
-
-        <div id="task-options" style="margin-top: 14px"></div>
-
-        <div id="reward-panel" style="display: none; margin-top: 14px">
-          <div style="font-weight: bold; margin-bottom: 8px">
-            AWARD POINTS TO:
-          </div>
-          <div style="display: grid; gap: 10px">
-            <button
-              class="win-btn"
-              id="btn-award-kylan"
-              style="background: var(--kylan); color: #fff"
-            >
-              KYLAN + POINTS
-            </button>
-            <button
-              class="win-btn"
-              id="btn-award-piper"
-              style="background: var(--piper); color: #000"
-            >
-              PIPER + POINTS
-            </button>
-            <button
-              class="win-btn"
-              id="btn-award-khyl"
-              style="background: var(--parent); color: #fff"
-            >
-              KHYL + POINTS
-            </button>
-            <button
-              class="win-btn"
-              id="btn-award-both"
-              style="background: var(--gold); color: #000"
-            >
-              BOTH + POINTS
-            </button>
+        <div id="reward-panel" style="display:none;">
+          <div class="reward-title">AWARD POINTS TO:</div>
+          <div class="reward-grid">
+            <button class="win-btn" id="btn-award-kylan">KYLAN + POINTS</button>
+            <button class="win-btn" id="btn-award-piper">PIPER + POINTS</button>
+            <button class="win-btn" id="btn-award-khyl">KHYL + POINTS</button>
+            <button class="win-btn" id="btn-award-both">BOTH + POINTS</button>
           </div>
         </div>
 
-        <div
-          id="task-feedback"
-          style="
-            margin-top: 12px;
-            font-size: 13px;
-            color: var(--neon);
-            display: none;
-          "
-        >
-          Correct
-        </div>
+        <div id="task-feedback" style="display:none;">Correct</div>
       </div>
 
       <button class="win-btn" id="btn-task-complete">COMPLETE</button>
-      <button
-        class="win-btn"
-        id="btn-task-close"
-        style="background: #222; color: #fff"
-      >
-        CLOSE
-      </button>
-    </div>
-
-    <div id="ai-modal" class="full-modal">
-      <h1 style="color: var(--gold)">AI VERIFY</h1>
-      <p id="ai-hint" style="opacity: 0.9">
-        AI verify is currently disabled for stability.
-      </p>
-
-      <video
-        id="ai-video"
-        autoplay
-        playsinline
-        muted
-        style="
-          width: 100%;
-          border-radius: 18px;
-          border: 2px solid #333;
-          background: #000;
-        "
-      ></video>
-
-      <canvas
-        id="ai-canvas"
-        style="
-          width: 100%;
-          margin-top: 10px;
-          border-radius: 18px;
-          border: 2px solid #222;
-        "
-      ></canvas>
-
-      <div
-        id="ai-status"
-        style="margin-top: 10px; font-family: monospace; color: var(--neon)"
-      >
-        Disabled
-      </div>
-
-      <div style="display: flex; gap: 10px; margin-top: 12px">
-        <button
-          class="win-btn"
-          id="btn-ai-start"
-          style="background: #333; color: #fff"
-        >
-          START
-        </button>
-        <button
-          class="win-btn"
-          id="btn-ai-capture"
-          style="background: var(--gold); color: #000"
-        >
-          CAPTURE
-        </button>
-        <button
-          class="win-btn"
-          id="btn-ai-stop"
-          style="background: #333; color: #fff"
-        >
-          STOP
-        </button>
-      </div>
-
-      <button
-        class="win-btn"
-        id="btn-ai-close"
-        style="background: #222; color: #fff; margin-top: 14px"
-      >
-        CLOSE
-      </button>
-    </div>
-
-    <div id="gallery-modal" class="full-modal">
-      <h1 style="color: var(--gold)">QUEST GALLERY</h1>
-      <p style="opacity: 0.85; margin-top: 6px">
-        Verified photos saved on this device.
-      </p>
-
-      <div style="display: flex; gap: 10px; margin-top: 10px">
-        <button
-          class="win-btn"
-          id="btn-gallery-refresh"
-          style="background: #333; color: #fff"
-        >
-          REFRESH
-        </button>
-        <button
-          class="win-btn"
-          id="btn-gallery-clear"
-          style="background: #5a1; color: #000"
-        >
-          CLEAR ALL
-        </button>
-        <button
-          class="win-btn"
-          id="btn-gallery-close"
-          style="background: #222; color: #fff"
-        >
-          CLOSE
-        </button>
-      </div>
-
-      <div id="gallery-list" style="margin-top: 14px; text-align: left"></div>
+      <button class="win-btn dark" id="btn-task-close">CLOSE</button>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -788,16 +150,6 @@
         });
       }
 
-      const pitch = document.getElementById("v-pitch");
-      const pitchLabel = document.getElementById("pitch-label");
-      if (pitch && pitchLabel) {
-        pitchLabel.textContent = pitch.value;
-        pitch.addEventListener(
-          "input",
-          () => (pitchLabel.textContent = pitch.value)
-        );
-      }
-
       const click = (id, targetId) => {
         const a = document.getElementById(id);
         const b = document.getElementById(targetId);
@@ -805,7 +157,6 @@
       };
 
       click("btn-close-settings-x", "btn-close-settings");
-      click("btn-close-commander-x", "btn-close-commander");
       click("btn-home-close-x", "btn-home-close");
 
       const pill = (onId, offId) => {
@@ -818,10 +169,6 @@
 
       const kids = document.getElementById("pill-kids");
       const teen = document.getElementById("pill-teen");
-      const park = document.getElementById("pill-park");
-      const docks = document.getElementById("pill-docks");
-      const full = document.getElementById("pill-full");
-
       if (kids && teen) {
         kids.addEventListener("click", () => pill("pill-kids", "pill-teen"));
         teen.addEventListener("click", () => pill("pill-teen", "pill-kids"));
@@ -830,35 +177,27 @@
       const setExp = (activeId) => {
         ["pill-park", "pill-docks", "pill-full"].forEach((id) => {
           const el = document.getElementById(id);
-          if (!el) return;
-          el.classList.toggle("active", id === activeId);
+          if (el) el.classList.toggle("active", id === activeId);
         });
       };
 
-      if (park) park.addEventListener("click", () => setExp("pill-park"));
-      if (docks) docks.addEventListener("click", () => setExp("pill-docks"));
-      if (full) full.addEventListener("click", () => setExp("pill-full"));
+      document.getElementById("pill-park")?.addEventListener("click", () => setExp("pill-park"));
+      document.getElementById("pill-docks")?.addEventListener("click", () => setExp("pill-docks"));
+      document.getElementById("pill-full")?.addEventListener("click", () => setExp("pill-full"));
 
-      const openSettings = document.getElementById("btn-open-settings");
-      if (openSettings) {
-        openSettings.addEventListener("click", () => {
-          const sm = document.getElementById("settings-modal");
-          if (sm) sm.style.display = "block";
-        });
-      }
-
-      const startClose = document.getElementById("btn-start-close");
-      const startCloseX = document.getElementById("btn-start-close-x");
-      const startModal = document.getElementById("start-modal");
-      const startBtn = document.getElementById("btn-start");
+      document.getElementById("btn-open-settings")?.addEventListener("click", () => {
+        const sm = document.getElementById("settings-modal");
+        if (sm) sm.style.display = "block";
+      });
 
       const hideStart = () => {
+        const startModal = document.getElementById("start-modal");
         if (startModal) startModal.style.display = "none";
       };
 
-      if (startClose) startClose.addEventListener("click", hideStart);
-      if (startCloseX) startCloseX.addEventListener("click", hideStart);
-      if (startBtn) startBtn.addEventListener("click", hideStart);
+      document.getElementById("btn-start-close-x")?.addEventListener("click", hideStart);
+      document.getElementById("btn-start")?.addEventListener("click", hideStart);
     </script>
   </body>
 </html>
+
