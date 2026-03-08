@@ -1,24 +1,25 @@
 // app.js
 import { PINS } from "./pins.js";
 import { getQA } from "./qa.js";
-import { createAIVerifier, listPhotos, clearPhotos } from "./ai_verify.js";
+import { listPhotos, clearPhotos } from "./ai_verify.js";
 
 /**
- * Barrow Quest / Barrow Inferno Engine
+ * Barrow Quest Engine
  * - GPS proximity trigger
- * - AR verify gating only for mission/course modes
- * - Per-pin limited random mode list
- * - Wildcard mode
- * - Manual reward assignment for all rewards
- * - AI Verify support
+ * - AR verify gating (manual verify supported)
+ * - Mode selection
+ * - Manual reward assignment for ALL modes
+ * - AI Verify disabled for stability
+ * - Stable option button wiring
+ * - Experience filter support (Park / Docks / Full Barrow)
  */
+
+const AI_VERIFY_ENABLED = false;
 
 // ===== CONFIG =====
 const ENTER_RADIUS_M_DEFAULT = 30;
 const PASS_BONUS_COINS = 10;
-const MODE_COMPLETE_COINS = 100;
 const CAPTURE_BONUS_COINS = 50;
-const QUEST_MODE_COUNT = 4;
 
 // ===== STATE =====
 let state = JSON.parse(localStorage.getItem("bq_master_v3")) || {
@@ -26,25 +27,31 @@ let state = JSON.parse(localStorage.getItem("bq_master_v3")) || {
   p: 0,
   khyl: 0,
   activeParticipant: "both",
-  pendingReward: 0,
+  pendingCaptureReward: 0,
   dk: 7,
   dp: 3,
   hpK: false,
   hpP: false,
   nodes: {},
   rules: { cooldownMin: 10, captureNeed: 3 },
+  currentExperience: "park",
 };
 
 state.k = state.k ?? 0;
 state.p = state.p ?? 0;
 state.khyl = state.khyl ?? 0;
 state.activeParticipant = state.activeParticipant || "both";
-state.pendingReward = state.pendingReward ?? 0;
+state.pendingCaptureReward = state.pendingCaptureReward ?? 0;
 state.rules = state.rules || { cooldownMin: 10, captureNeed: 3 };
 state.nodes = state.nodes || {};
+state.currentExperience = state.currentExperience || "park";
+
 state.session = state.session || {};
 state.session.qaSalt = state.session.qaSalt ?? Date.now();
+state.session.missionsCompleted = state.session.missionsCompleted ?? 0;
+state.session.rank = state.session.rank ?? 1;
 
+// settings defaults
 state.settings = state.settings || {};
 state.settings = {
   voiceRate: state.settings.voiceRate ?? 1.0,
@@ -58,10 +65,12 @@ state.settings = {
   rotSmooth: state.settings.rotSmooth ?? 0.55,
 };
 
+// ===== DOM =====
 const $ = (id) => document.getElementById(id);
 
 // ===== RULE GETTERS =====
 const getCaptureNeed = () => state.rules?.captureNeed ?? 3;
+
 const getEnterRadiusM = () => {
   const v = parseInt(
     state.settings?.enterRadiusM ?? ENTER_RADIUS_M_DEFAULT,
@@ -70,39 +79,69 @@ const getEnterRadiusM = () => {
   return Number.isFinite(v) ? v : ENTER_RADIUS_M_DEFAULT;
 };
 
-// ===== CHARACTER SYSTEM =====
+// ===== RANK SYSTEM =====
+const RANK_TABLE = [
+  { rank: 1, missions: 0 },
+  { rank: 2, missions: 10 },
+  { rank: 3, missions: 25 },
+  { rank: 4, missions: 50 },
+  { rank: 5, missions: 100 },
+];
+
+function updateRank() {
+  let nextRank = 1;
+  for (const row of RANK_TABLE) {
+    if ((state.session.missionsCompleted ?? 0) >= row.missions) {
+      nextRank = row.rank;
+    }
+  }
+  state.session.rank = nextRank;
+  save();
+}
+
+function completeMissionProgress() {
+  state.session.missionsCompleted = (state.session.missionsCompleted ?? 0) + 1;
+  updateRank();
+  save();
+}
+
+function getRank() {
+  return state.session.rank ?? 1;
+}
+
+// ===== Character system =====
 const CHARACTERS = {
   hero_duo: {
     label: "Hero Duo",
-    iconHtml: `<div style="font-size:50px">🦸‍♂️👸</div>`,
+    iconHtml: `<div style="font-size:50px">HD</div>`,
     pointsMult: 1.0,
     healthMult: 1.0,
     arBonus: 1.0,
   },
   ninja: {
     label: "Ninja Scout",
-    iconHtml: `<div style="font-size:50px">🥷</div>`,
+    iconHtml: `<div style="font-size:50px">N</div>`,
     pointsMult: 1.1,
     healthMult: 0.9,
     arBonus: 0.9,
   },
   wizard: {
     label: "Wizard Guide",
-    iconHtml: `<div style="font-size:50px">🧙</div>`,
+    iconHtml: `<div style="font-size:50px">W</div>`,
     pointsMult: 1.0,
     healthMult: 1.0,
     arBonus: 1.25,
   },
   robot: {
     label: "Robo Ranger",
-    iconHtml: `<div style="font-size:50px">🤖</div>`,
+    iconHtml: `<div style="font-size:50px">R</div>`,
     pointsMult: 1.2,
     healthMult: 1.15,
     arBonus: 0.85,
   },
   pirate: {
     label: "Pirate Captain",
-    iconHtml: `<div style="font-size:50px">🏴‍☠️</div>`,
+    iconHtml: `<div style="font-size:50px">P</div>`,
     pointsMult: 1.15,
     healthMult: 1.05,
     arBonus: 0.95,
@@ -139,7 +178,7 @@ const PIN_RULES = {
     type: "boss",
     captureNeed: 4,
     requiredModes: ["battle", "logic", "speed", "quiz"],
-    allowedModes: ["battle", "logic", "speed", "quiz", "wildcard"],
+    allowedModes: ["battle", "logic", "speed", "quiz"],
     cooldownMin: 30,
     banner: "FINAL BOSS: Complete all phases to capture.",
   },
@@ -148,133 +187,27 @@ const PIN_RULES = {
 function getPinRule(pin) {
   return pin ? PIN_RULES[pin.id] || null : null;
 }
+
 function getEffectiveCaptureNeed(pin) {
   return getPinRule(pin)?.captureNeed ?? getCaptureNeed();
 }
+
 function getEffectiveCooldownMs(pin) {
   const r = getPinRule(pin);
   const min = r?.cooldownMin ?? state.rules?.cooldownMin ?? 10;
   return min * 60 * 1000;
 }
+
 function requiredModesFor(pin) {
   return Array.isArray(getPinRule(pin)?.requiredModes)
     ? getPinRule(pin).requiredModes
     : null;
 }
+
 function allowedModesFor(pin) {
   return Array.isArray(getPinRule(pin)?.allowedModes)
     ? getPinRule(pin).allowedModes
     : null;
-}
-
-// ===== MODE SYSTEM =====
-const ALL_MODES = [
-  "quiz",
-  "battle",
-  "history",
-  "logic",
-  "speed",
-  "health",
-  "activity",
-  "family",
-];
-
-const MODE_META = {
-  quiz: { label: "QUIZ", icon: "❓" },
-  battle: { label: "BATTLE", icon: "⚔️" },
-  history: { label: "HISTORY", icon: "📜" },
-  logic: { label: "LOGIC", icon: "🧩" },
-  speed: { label: "SPEED", icon: "⚡" },
-  health: { label: "HEALTH", icon: "🏃" },
-  activity: { label: "ACTIVITY", icon: "🎯" },
-  family: { label: "FAMILY", icon: "👨‍👩‍👧" },
-  wildcard: { label: "WILDCARD", icon: "🃏" },
-};
-
-function modeNeedsAR(mode) {
-  return ["activity", "health"].includes(mode);
-}
-
-function seededValue(str) {
-  let h = 2166136261;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-function seededShuffle(arr, seed) {
-  const a = [...arr];
-  let x = seed >>> 0;
-  for (let i = a.length - 1; i > 0; i--) {
-    x = (x * 1664525 + 1013904223) >>> 0;
-    const j = x % (i + 1);
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-function getModesForPin(pin) {
-  const allowed = allowedModesFor(pin);
-  const pool = allowed
-    ? allowed.filter((m) => m !== "wildcard")
-    : [...ALL_MODES];
-
-  const seed = seededValue(`${pin.id}|${state.session.qaSalt}|modes`);
-  let picked = seededShuffle(pool, seed).slice(0, QUEST_MODE_COUNT);
-
-  if (!picked.length) picked = ["quiz", "history", "logic", "battle"];
-
-  if (!picked.includes("wildcard")) picked.push("wildcard");
-  return picked;
-}
-
-function resolveWildcardMode(pin) {
-  const ns = nodeState(pin.id);
-  const allowed = allowedModesFor(pin);
-  const pool = (
-    allowed ? allowed.filter((m) => m !== "wildcard") : ALL_MODES
-  ).filter((m) => !ns.completedModes.includes(m));
-
-  if (!pool.length) return "quiz";
-  const seed = seededValue(`${pin.id}|${state.session.qaSalt}|wildcard`);
-  return pool[seed % pool.length];
-}
-
-function renderQuestModes(pin) {
-  const wrap = $("quest-modes");
-  if (!wrap || !pin) return;
-
-  const ns = nodeState(pin.id);
-  const modes = getModesForPin(pin);
-
-  wrap.innerHTML = "";
-
-  modes.forEach((mode) => {
-    const actualMode = mode === "wildcard" ? resolveWildcardMode(pin) : mode;
-    const meta = MODE_META[mode] || MODE_META.quiz;
-    const completed = ns.completedModes.includes(actualMode);
-    const needsAR = modeNeedsAR(actualMode);
-
-    const tile = document.createElement("div");
-    tile.className = "m-tile";
-    tile.setAttribute("data-mode", mode);
-
-    let sub = "";
-    if (mode === "wildcard") sub = `<small>Random mode</small>`;
-    else if (needsAR && !ns.arVerified) sub = `<small>Needs AR</small>`;
-    else if (completed) sub = `<small>Done</small>`;
-
-    tile.innerHTML = `<span>${meta.icon}</span>${meta.label}${sub}`;
-
-    if (completed) {
-      tile.style.opacity = "0.45";
-    }
-
-    tile.addEventListener("click", () => launchMode(mode));
-    wrap.appendChild(tile);
-  });
 }
 
 // ===== RUNTIME =====
@@ -292,31 +225,26 @@ let healthTarget = 0;
 // ===== AR =====
 let arStream = null;
 
-// ===== AI VERIFY + GALLERY =====
+// ===== AI VERIFY STATE (disabled) =====
 let ai = {
-  verifier: null,
   running: false,
-  template: "still",
-  pinId: null,
-  pinName: "",
-  child: "Both",
-  taskLabel: "Pose Challenge",
 };
 
+// ===== VOICE PACK =====
 const VOICE_PACK = {
   kid: {
     welcome: "Hey explorers! Welcome back!",
     nearPin: "Nice! You found a mission spot. Tap the lightning button!",
-    verified: "Boom! Verified! Nice one!",
-    tryAgain: "Nearly! Try again. You have got this!",
+    verified: "Verified! Nice one!",
+    tryAgain: "Nearly! Try again.",
     correct: "Brilliant! You got it right!",
     reward: "Reward ready.",
     capture: "Node captured! Great work!",
   },
   teen: {
     welcome: "Alright. Mission time.",
-    nearPin: "You are in range. Hit the lightning button.",
-    verified: "Clean. Verified.",
+    nearPin: "You're in range. Hit the lightning button.",
+    verified: "Verified.",
     tryAgain: "Close. Run it again.",
     correct: "Correct.",
     reward: "Reward ready.",
@@ -324,8 +252,8 @@ const VOICE_PACK = {
   },
 };
 
-function difficultyTier() {
-  return state.dp <= 4 ? "kid" : "adult";
+function cleanSpeechText(text) {
+  return String(text || "").replace(/[^\w\s.,!?'"():;\-]/g, "");
 }
 
 function voiceLine(key) {
@@ -333,7 +261,7 @@ function voiceLine(key) {
   return pack[key] || "";
 }
 
-// ===== CLICK WIRING =====
+// ===== SAFE CLICK WIRING =====
 function onClick(id, fn) {
   const el = $(id);
   if (!el) return;
@@ -358,33 +286,22 @@ function haversineMeters(a, b) {
   return 2 * R * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
 }
 
-function stripForSpeech(text) {
-  return String(text || "")
-    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function speak(t) {
-  const clean = stripForSpeech(t);
-  if (!clean) return;
-
+  if (!t) return;
   try {
     const synth = window.speechSynthesis;
     if (!synth) return;
     synth.cancel();
-
-    const u = new SpeechSynthesisUtterance(clean);
+    const cleaned = cleanSpeechText(t);
+    const u = new SpeechSynthesisUtterance(cleaned);
     const pitchSlider = parseFloat($("v-pitch")?.value || "1.0");
     u.pitch = Number.isFinite(pitchSlider) ? pitchSlider : 1.0;
-
     const rateSlider = parseFloat(
       $("v-rate")?.value || String(state.settings.voiceRate || 1.0)
     );
     u.rate = Number.isFinite(rateSlider) ? rateSlider : 1.0;
     u.volume = 1.0;
     u.lang = "en-GB";
-
     setTimeout(() => {
       try {
         synth.speak(u);
@@ -403,31 +320,11 @@ function toggleM(id, force) {
   m.style.display = m.style.display === "block" ? "none" : "block";
 }
 
-function activeParticipantLabel(target = state.activeParticipant) {
-  if (target === "kylan") return "Kylan";
-  if (target === "piper") return "Piper";
-  if (target === "khyl") return "KHYL";
+function activeParticipantLabel() {
+  if (state.activeParticipant === "kylan") return "Kylan";
+  if (state.activeParticipant === "piper") return "Piper";
+  if (state.activeParticipant === "khyl") return "KHYL";
   return "Both";
-}
-
-// ===== REWARD SYSTEM =====
-function showRewardPanel(show = true) {
-  const panel = $("reward-panel");
-  if (panel) panel.style.display = show ? "block" : "none";
-}
-
-function addPendingReward(amount) {
-  const gain = Math.max(0, Math.round(amount || 0));
-  if (!gain) return;
-  state.pendingReward = (state.pendingReward || 0) + gain;
-  save();
-  showRewardPanel(true);
-}
-
-function clearPendingReward() {
-  state.pendingReward = 0;
-  save();
-  showRewardPanel(false);
 }
 
 function awardPointsTo(target, amount) {
@@ -437,7 +334,7 @@ function awardPointsTo(target, amount) {
   if (target === "kylan") state.k += gain;
   else if (target === "piper") state.p += gain;
   else if (target === "khyl") state.khyl += gain;
-  else {
+  else if (target === "both") {
     state.k += gain;
     state.p += gain;
   }
@@ -445,26 +342,28 @@ function awardPointsTo(target, amount) {
   save();
   playSuccessSfx();
   pulseCoinsHud();
-  burstEmoji(10, "🪙");
-  showRewardPopup(
-    `+${gain} COINS`,
-    `${activeParticipantLabel(target)} awarded!`
-  );
+  burstEmoji(10, "COIN");
+  showRewardPopup(`+${gain} COINS`, `${target.toUpperCase()} awarded!`);
 }
 
-function awardPendingTo(target) {
-  const gain = state.pendingReward || 0;
-  if (!gain) return;
-  awardPointsTo(target, gain);
-  clearPendingReward();
+function showRewardPanel(show = true) {
+  const panel = $("reward-panel");
+  if (panel) panel.style.display = show ? "block" : "none";
 }
 
-function grantPassBonusOnce() {
-  if (!activeTask || activeTask.rewardedOnPass) return;
-  activeTask.rewardedOnPass = true;
-  addPendingReward(PASS_BONUS_COINS);
-  showRewardPopup(`+${PASS_BONUS_COINS} BONUS`, "Reward ready to assign");
-  speak(voiceLine("reward"));
+function getPendingRewardAmount() {
+  if (activeTask?.pendingReward) return activeTask.pendingReward;
+  if (state.pendingCaptureReward) return state.pendingCaptureReward;
+  return PASS_BONUS_COINS;
+}
+
+function clearPendingRewards() {
+  if (activeTask) {
+    activeTask.rewardedOnPass = true;
+    activeTask.pendingReward = 0;
+  }
+  state.pendingCaptureReward = 0;
+  save();
 }
 
 // ===== REWARD FX =====
@@ -480,14 +379,11 @@ function beep(freq = 660, duration = 0.12, type = "sine", gain = 0.05) {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     if (!audioCtx) audioCtx = new AC();
-
     const osc = audioCtx.createOscillator();
     const g = audioCtx.createGain();
-
     osc.type = type;
     osc.frequency.value = freq;
     g.gain.value = gain * getSfxVolume();
-
     osc.connect(g);
     g.connect(audioCtx.destination);
     osc.start();
@@ -500,10 +396,12 @@ function playSuccessSfx() {
   setTimeout(() => beep(880, 0.1, "triangle", 0.055), 70);
   setTimeout(() => beep(1040, 0.12, "triangle", 0.06), 140);
 }
+
 function playFailSfx() {
   beep(220, 0.1, "sawtooth", 0.04);
   setTimeout(() => beep(180, 0.12, "sawtooth", 0.035), 90);
 }
+
 function playCaptureSfx() {
   beep(520, 0.09, "square", 0.05);
   setTimeout(() => beep(780, 0.12, "square", 0.055), 80);
@@ -513,7 +411,6 @@ function playCaptureSfx() {
 function ensureRewardLayer() {
   let fx = $("reward-fx-layer");
   if (fx) return fx;
-
   fx = document.createElement("div");
   fx.id = "reward-fx-layer";
   fx.style.position = "fixed";
@@ -524,10 +421,9 @@ function ensureRewardLayer() {
   return fx;
 }
 
-function burstEmoji(count = 12, emoji = "✨") {
+function burstEmoji(count = 12, emoji = "STAR") {
   const layer = ensureRewardLayer();
   const rect = document.body.getBoundingClientRect();
-
   for (let i = 0; i < count; i++) {
     const el = document.createElement("div");
     el.textContent = emoji;
@@ -539,7 +435,6 @@ function burstEmoji(count = 12, emoji = "✨") {
     el.style.transition =
       "transform 900ms ease-out, opacity 900ms ease-out, top 900ms ease-out";
     layer.appendChild(el);
-
     requestAnimationFrame(() => {
       const dx = -80 + Math.random() * 160;
       const dy = -100 - Math.random() * 120;
@@ -548,7 +443,6 @@ function burstEmoji(count = 12, emoji = "✨") {
       }deg)`;
       el.style.opacity = "0";
     });
-
     setTimeout(() => el.remove(), 950);
   }
 }
@@ -556,7 +450,6 @@ function burstEmoji(count = 12, emoji = "✨") {
 function showRewardPopup(title, subtitle = "", tone = "success") {
   const layer = ensureRewardLayer();
   const card = document.createElement("div");
-
   card.style.position = "fixed";
   card.style.left = "50%";
   card.style.top = "20%";
@@ -578,26 +471,21 @@ function showRewardPopup(title, subtitle = "", tone = "success") {
     <div style="font-size:22px;font-weight:bold;margin-bottom:6px;">${title}</div>
     <div style="font-size:14px;opacity:.92;">${subtitle}</div>
   `;
-
   layer.appendChild(card);
-
   requestAnimationFrame(() => {
     card.style.opacity = "1";
     card.style.transform = "translate(-50%, 0) scale(1)";
   });
-
   setTimeout(() => {
     card.style.opacity = "0";
     card.style.transform = "translate(-50%, -12px) scale(0.97)";
-  }, 4200);
-
-  setTimeout(() => card.remove(), 4700);
+  }, 3200);
+  setTimeout(() => card.remove(), 3700);
 }
 
 function pulseCoinsHud() {
   const hud = $("coin-hud");
   if (!hud) return;
-
   hud.animate(
     [
       { transform: "scale(1)", boxShadow: "0 0 0 rgba(241,196,15,0)" },
@@ -613,15 +501,17 @@ function pulseCoinsHud() {
 
 function celebrateCorrect(fact = "") {
   playSuccessSfx();
-  burstEmoji(14, "✨");
+  burstEmoji(14, "STAR");
   showRewardPopup("CORRECT!", fact || "Great job, explorer!");
 }
+
 function celebrateCapture(mins) {
   playCaptureSfx();
-  burstEmoji(18, "🏆");
+  burstEmoji(18, "TROPHY");
   showRewardPopup("NODE CAPTURED!", `Reawakens in ${mins} minutes`);
   speak(voiceLine("capture"));
 }
+
 function warnTryAgain() {
   playFailSfx();
   showRewardPopup("NOT QUITE", "Try again, explorer.", "fail");
@@ -669,17 +559,27 @@ function save() {
     $("hp-k-tag").className = state.hpK
       ? "hp-status hp-on"
       : "hp-status hp-off";
-    $("hp-k-tag").innerText = state.hpK ? "🎧 ACTIVE" : "🎧 OFF";
+    $("hp-k-tag").innerText = state.hpK ? "ACTIVE" : "OFF";
   }
 
   if ($("hp-p-tag")) {
     $("hp-p-tag").className = state.hpP
       ? "hp-status hp-on"
       : "hp-status hp-off";
-    $("hp-p-tag").innerText = state.hpP ? "🎧 ACTIVE" : "🎧 OFF";
+    $("hp-p-tag").innerText = state.hpP ? "ACTIVE" : "OFF";
   }
 
   updateCaptureHud();
+  updateRankHud();
+}
+
+function updateRankHud() {
+  const existing = $("rank-hud");
+  if (!existing) return;
+  const next = RANK_TABLE.find((x) => x.rank > getRank());
+  existing.innerText = next
+    ? `RANK ${getRank()} | MISSIONS ${state.session.missionsCompleted} | NEXT ${next.missions}`
+    : `RANK ${getRank()} | MISSIONS ${state.session.missionsCompleted} | MAX`;
 }
 
 function toggleHP(unit) {
@@ -704,6 +604,45 @@ function nodeState(id) {
 function isOnCooldown(id) {
   const ns = nodeState(id);
   return ns.cooldownUntil && Date.now() < ns.cooldownUntil;
+}
+
+// ===== EXPERIENCE + UNLOCKING =====
+function pinMatchesExperience(pin) {
+  const exp = state.currentExperience || "park";
+  if (exp === "full") return true;
+  if (exp === "park") return pin.zone === "Nature";
+  if (exp === "docks") {
+    return pin.zone === "Docks" || pin.zone === "Industrial";
+  }
+  return true;
+}
+
+function pinUnlockedForRank(pin) {
+  const rank = getRank();
+
+  if (state.currentExperience === "park") {
+    if (rank === 1) return pin.id <= 7 || pin.id === 35 || pin.id === 37;
+    if (rank === 2) return pin.zone === "Nature";
+    return pin.zone === "Nature";
+  }
+
+  if (state.currentExperience === "docks") {
+    if (rank === 1) return [3, 13, 24, 46, 69, 81].includes(pin.id);
+    if (rank === 2) return pin.zone === "Docks" || pin.zone === "Industrial";
+    return pin.zone === "Docks" || pin.zone === "Industrial";
+  }
+
+  if (rank === 1) return pin.id <= 20;
+  if (rank === 2) return pin.id <= 40;
+  if (rank === 3) return pin.id <= 70;
+  if (rank === 4) return pin.id <= 100;
+  return true;
+}
+
+function getVisiblePins() {
+  return PINS.filter(
+    (pin) => pinMatchesExperience(pin) && pinUnlockedForRank(pin)
+  );
 }
 
 // ===== MAP INIT =====
@@ -745,7 +684,7 @@ function initPins() {
   Object.values(activeMarkers).forEach((m) => map.removeLayer(m));
   activeMarkers = {};
 
-  PINS.forEach((p) => {
+  getVisiblePins().forEach((p) => {
     if (!isOnCooldown(p.id)) {
       const m = L.marker(p.l, {
         icon: L.divIcon({ className: "marker-logo", html: p.i }),
@@ -767,8 +706,8 @@ function startGPSWatcher() {
     if (healthActive) {
       const pt = { lat: e.latlng.lat, lng: e.latlng.lng };
       if (!healthLast) healthLast = pt;
-
       const step = haversineMeters(healthLast, pt);
+
       if (step > 0.5 && step < 20) {
         healthMeters += step;
         healthLast = pt;
@@ -784,22 +723,22 @@ function startGPSWatcher() {
 
       if (healthMeters >= healthTarget) {
         healthActive = false;
-        if (fb)
+        if (fb) {
           fb.innerText = `Completed Distance: ${healthMeters.toFixed(0)}m`;
-
+        }
         if (activeTask) {
           activeTask.passed = true;
-          grantPassBonusOnce();
+          activeTask.pendingReward = PASS_BONUS_COINS;
         }
-
         celebrateCorrect("Health objective complete!");
+        showRewardPanel(true);
         speak("Health objective complete.");
       }
     }
 
-    const near = PINS.find(
-      (p) =>
-        map.distance(e.latlng, p.l) < getEnterRadiusM() && !isOnCooldown(p.id)
+    const visiblePins = getVisiblePins();
+    const near = visiblePins.find(
+      (p) => map.distance(e.latlng, p.l) < getEnterRadiusM() && !isOnCooldown(p.id)
     );
 
     if (near) {
@@ -810,7 +749,7 @@ function startGPSWatcher() {
     } else {
       if ($("action-trigger")) $("action-trigger").style.display = "none";
       cur = null;
-      if ($("capture-hud")) $("capture-hud").innerText = "CAPTURE: —";
+      if ($("capture-hud")) $("capture-hud").innerText = "CAPTURE: -";
     }
   });
 
@@ -825,6 +764,7 @@ function wireHUD() {
     renderHomeLog();
     toggleM("home-modal", true);
   });
+
   onClick("btn-home-close", () => toggleM("home-modal", false));
   onClick("btn-commander", () => toggleM("commander-hub", true));
   onClick("btn-settings", () => toggleM("settings-modal", true));
@@ -833,7 +773,6 @@ function wireHUD() {
   onClick("btn-close-commander-x", () => toggleM("commander-hub", false));
   onClick("btn-close-settings-x", () => toggleM("settings-modal", false));
   onClick("btn-home-close-x", () => toggleM("home-modal", false));
-
   onClick("btn-hp-k", () => toggleHP("k"));
   onClick("btn-hp-p", () => toggleHP("p"));
 
@@ -887,8 +826,9 @@ function wireHUD() {
     radius.addEventListener("input", () => {
       state.settings.enterRadiusM =
         parseInt(radius.value, 10) || ENTER_RADIUS_M_DEFAULT;
-      if (radiusLabel)
+      if (radiusLabel) {
         radiusLabel.innerText = String(state.settings.enterRadiusM);
+      }
       save();
     });
   }
@@ -900,8 +840,9 @@ function wireHUD() {
     if (arLabel) arLabel.innerText = (arMode.value || "easy").toUpperCase();
     arMode.addEventListener("change", () => {
       state.settings.arMode = arMode.value || "easy";
-      if (arLabel)
+      if (arLabel) {
         arLabel.innerText = (state.settings.arMode || "easy").toUpperCase();
+      }
       save();
     });
   }
@@ -976,33 +917,34 @@ function wireHUD() {
     speak("All nodes reset.");
   });
 
-  // AI
-  onClick("btn-ai-start", aiStart);
-  onClick("btn-ai-stop", () => aiStop(false));
-  onClick("btn-ai-close", () => aiStop(true));
-  onClick("btn-ai-capture", async () => {
-    const ok = await aiCaptureAndVerify();
-    if (ok && activeTask) {
-      activeTask.passed = true;
-      grantPassBonusOnce();
-      if ($("task-feedback")) {
-        $("task-feedback").style.display = "block";
-        $("task-feedback").innerText = `Verified! Photo saved. ${
-          activeTask.fact || ""
-        }`;
-      }
-      celebrateCorrect(activeTask.fact || "Verified activity complete!");
-      toggleM("ai-modal", false);
-      toggleM("task-modal", true);
-      showRewardPanel(true);
-    }
+  // reward buttons
+  onClick("btn-award-kylan", () => {
+    const amount = getPendingRewardAmount();
+    awardPointsTo("kylan", amount);
+    clearPendingRewards();
+    showRewardPanel(false);
   });
 
-  // Manual reward buttons
-  onClick("btn-award-kylan", () => awardPendingTo("kylan"));
-  onClick("btn-award-piper", () => awardPendingTo("piper"));
-  onClick("btn-award-khyl", () => awardPendingTo("khyl"));
-  onClick("btn-award-both", () => awardPendingTo("both"));
+  onClick("btn-award-piper", () => {
+    const amount = getPendingRewardAmount();
+    awardPointsTo("piper", amount);
+    clearPendingRewards();
+    showRewardPanel(false);
+  });
+
+  onClick("btn-award-khyl", () => {
+    const amount = getPendingRewardAmount();
+    awardPointsTo("khyl", amount);
+    clearPendingRewards();
+    showRewardPanel(false);
+  });
+
+  onClick("btn-award-both", () => {
+    const amount = getPendingRewardAmount();
+    awardPointsTo("both", amount);
+    clearPendingRewards();
+    showRewardPanel(false);
+  });
 
   // Gallery
   onClick("btn-gallery-close", () => toggleM("gallery-modal", false));
@@ -1017,85 +959,54 @@ function wireHUD() {
     speak("Systems online. GPS ready.");
     openGallery();
   });
-}
 
-// ===== AI =====
-function openAI(template, { pinId, pinName, child, taskLabel, hint, voice }) {
-  ai.template = template || "still";
-  ai.pinId = pinId ?? null;
-  ai.pinName = pinName || "";
-  ai.child = child || "Both";
-  ai.taskLabel = taskLabel || "Pose Challenge";
-
-  if ($("ai-hint")) {
-    $("ai-hint").innerText = hint || "Copy the pose, then press CAPTURE.";
-  }
-  if ($("ai-status")) $("ai-status").innerText = "Ready…";
-
-  toggleM("ai-modal", true);
-  if (voice) speak(voice);
-}
-
-async function ensureAIVerifier() {
-  if (ai.verifier) return ai.verifier;
-  ai.verifier = await createAIVerifier({
-    videoEl: $("ai-video"),
-    canvasEl: $("ai-canvas"),
-    statusEl: $("ai-status"),
-  });
-  return ai.verifier;
-}
-
-async function aiStart() {
-  const v = await ensureAIVerifier();
-  ai.running = true;
-  await v.start();
-}
-
-async function aiStop(close = false) {
-  try {
-    if (ai.verifier) await ai.verifier.stop();
-  } catch {}
-  ai.running = false;
-  if (close) toggleM("ai-modal", false);
-}
-
-async function aiCaptureAndVerify() {
-  const v = await ensureAIVerifier();
-  const res = await v.captureAndVerify({
-    template: ai.template,
-    pinId: ai.pinId,
-    pinName: ai.pinName,
-    child: ai.child,
-    taskLabel: ai.taskLabel,
-    autosave: true,
+  // start screen choices
+  onClick("btn-start", () => {
+    initExperienceFromStart();
+    initPins();
+    save();
   });
 
-  if ($("ai-status")) {
-    $("ai-status").innerText = res.ok
-      ? `VERIFIED — ${res.reason}`
-      : `NOT YET — ${res.reason}`;
+  const kids = $("pill-kids");
+  const teen = $("pill-teen");
+  if (kids && teen) {
+    kids.addEventListener("click", () => {
+      if ($("dp")) $("dp").value = "3";
+      state.dp = 3;
+      save();
+    });
+    teen.addEventListener("click", () => {
+      if ($("dp")) $("dp").value = "8";
+      state.dp = 8;
+      save();
+    });
   }
-
-  speak(res.ok ? voiceLine("verified") : voiceLine("tryAgain"));
-  return res.ok;
 }
 
-// ===== GALLERY =====
-function blobToImgUrl(blob) {
-  return URL.createObjectURL(blob);
+function initExperienceFromStart() {
+  if ($("pill-park")?.classList.contains("active")) {
+    state.currentExperience = "park";
+  } else if ($("pill-docks")?.classList.contains("active")) {
+    state.currentExperience = "docks";
+  } else {
+    state.currentExperience = "full";
+  }
+}
+
+// ===== AI disabled helpers =====
+function openAI() {
+  showRewardPopup("AI VERIFY OFF", "Activity will use normal completion only.");
 }
 
 async function renderGallery() {
   const wrap = $("gallery-list");
   if (!wrap) return;
+  wrap.innerHTML = "<div style='opacity:.8'>Loading...</div>";
 
-  wrap.innerHTML = "<div style='opacity:.8'>Loading…</div>";
   const rows = await listPhotos(200);
-
   if (!rows.length) {
     wrap.innerHTML =
-      "<div style='opacity:.8'>No saved photos yet. Do an AI Verify activity and it will save on success.</div>";
+      "<div style='opacity:.8'>No saved photos yet.</div>";
     return;
   }
 
@@ -1103,15 +1014,13 @@ async function renderGallery() {
     .map((r) => {
       const d = new Date(r.ts);
       const when = d.toLocaleString();
-      const url = blobToImgUrl(r.blob);
+      const url = URL.createObjectURL(r.blob);
       return `
         <div style="padding:10px;border:1px solid #333;border-radius:14px;margin:10px 0;background:#111;">
-          <div style="font-weight:bold;">${r.pinName || "Unknown Pin"} — ${
+          <div style="font-weight:bold;">${r.pinName || "Unknown Pin"} - ${
         r.taskLabel || "Pose"
       }</div>
-          <div style="opacity:.85;font-size:12px;margin-top:4px;">${when} • ${
-        r.child || "Both"
-      } • template: ${r.template}</div>
+          <div style="opacity:.85;font-size:12px;margin-top:4px;">${when}</div>
           <img src="${url}" style="width:100%;margin-top:10px;border-radius:12px;border:1px solid #222;" />
         </div>`;
     })
@@ -1149,29 +1058,44 @@ function openQuest() {
 
   const ns = nodeState(cur.id);
   if ($("q-name")) $("q-name").innerText = cur.n;
-
   $("map")?.classList.add("shatter-mode");
   toggleM("quest-modal", true);
   showPinBanners(cur);
-  renderQuestModes(cur);
 
   const effectiveNeed = getEffectiveCaptureNeed(cur);
 
   if (isOnCooldown(cur.id)) {
     const mins = Math.ceil((ns.cooldownUntil - Date.now()) / 60000);
     if ($("quest-status")) {
-      $(
-        "quest-status"
-      ).innerText = `STATUS: CAPTURED (reawakens in ~${mins} min)`;
+      $("quest-status").innerText = `STATUS: CAPTURED (reawakens in ~${mins} min)`;
     }
     if ($("btn-ar-open")) $("btn-ar-open").style.display = "none";
+    disableModeTiles(true);
+  } else if (!ns.arVerified) {
+    if ($("quest-status")) $("quest-status").innerText = "STATUS: NEEDS AR VERIFY";
+    if ($("btn-ar-open")) $("btn-ar-open").style.display = "block";
+    disableModeTiles(true);
   } else {
     if ($("quest-status")) {
-      $("quest-status").innerText = ns.arVerified
-        ? `STATUS: VERIFIED (Complete ${effectiveNeed} modes to capture)`
-        : `STATUS: READY — AR only needed for mission modes`;
+      $("quest-status").innerText = `STATUS: VERIFIED (Complete ${effectiveNeed} modes to capture)`;
     }
-    if ($("btn-ar-open")) $("btn-ar-open").style.display = "block";
+    if ($("btn-ar-open")) $("btn-ar-open").style.display = "none";
+    disableModeTiles(false);
+
+    const allowed = allowedModesFor(cur);
+    if (allowed) {
+      document.querySelectorAll(".m-tile").forEach((tile) => {
+        const mode = tile.getAttribute("data-mode");
+        const ok = allowed.includes(mode);
+        tile.style.opacity = ok ? "1" : "0.2";
+        tile.style.pointerEvents = ok ? "auto" : "none";
+      });
+    } else {
+      document.querySelectorAll(".m-tile").forEach((tile) => {
+        tile.style.opacity = "1";
+        tile.style.pointerEvents = "auto";
+      });
+    }
   }
 
   updateCaptureHud();
@@ -1181,6 +1105,13 @@ function openQuest() {
 function closeQuest() {
   toggleM("quest-modal", false);
   $("map")?.classList.remove("shatter-mode");
+}
+
+function disableModeTiles(disabled) {
+  document.querySelectorAll(".m-tile").forEach((tile) => {
+    tile.style.opacity = disabled ? "0.35" : "1";
+    tile.style.pointerEvents = disabled ? "none" : "auto";
+  });
 }
 
 // ===== AR VERIFY =====
@@ -1195,8 +1126,9 @@ async function startARVerify() {
   if (!cur) return;
 
   toggleM("ar-modal", true);
-  if ($("ar-hint"))
+  if ($("ar-hint")) {
     $("ar-hint").innerText = cur?.ar?.hint || "Face the landmark and scan.";
+  }
   if ($("ar-readout")) $("ar-readout").innerText = "Heading: --";
 
   try {
@@ -1225,72 +1157,91 @@ function stopARVerify(closeModal) {
 
 function completeARVerify() {
   if (!cur) return;
-
   const ns = nodeState(cur.id);
   if (ns.arVerified) return;
 
   ns.arVerified = true;
   save();
   stopARVerify(true);
-
   playSuccessSfx();
-  burstEmoji(10, "📷");
-  showRewardPopup("VERIFIED!", "Mission modes unlocked");
-  speak("AR verified. Mission modes unlocked.");
+  burstEmoji(10, "CAM");
+  showRewardPopup("VERIFIED!", "Node unlocked");
+  speak("AR verified. Node unlocked.");
 
   if ($("quest-status")) {
-    $(
-      "quest-status"
-    ).innerText = `STATUS: VERIFIED (Complete ${getEffectiveCaptureNeed(
+    $("quest-status").innerText = `STATUS: VERIFIED (Complete ${getEffectiveCaptureNeed(
       cur
     )} modes to capture)`;
   }
+
+  if ($("btn-ar-open")) $("btn-ar-open").style.display = "none";
+  disableModeTiles(false);
 }
 
-// ===== MODES =====
+// ===== MODE LAUNCH =====
 function wireModes() {
   onClick("btn-close-quest", closeQuest);
   onClick("btn-task-close", () => toggleM("task-modal", false));
   onClick("btn-task-complete", finishMode);
+
+  document.querySelectorAll(".m-tile").forEach((tile) => {
+    tile.addEventListener("click", () => {
+      const mode = tile.getAttribute("data-mode");
+      launchMode(mode);
+    });
+  });
 }
 
 let activeTask = null;
 
+function difficultyTier() {
+  return state.dp <= 4 ? "kid" : "adult";
+}
+
+function maybeWildcard() {
+  const roll = Math.random();
+  if (roll > 0.05) return null;
+
+  return {
+    q: "WILDCARD: Treasure chest discovered!",
+    options: ["OPEN CHEST", "LEAVE IT", "SKIP", "UNSAFE"],
+    answer: 0,
+    fact: "Lucky find! Rare reward ready.",
+    meta: { wildcard: true, rewardCoins: 250 },
+  };
+}
+
 function launchMode(mode) {
   if (!cur) return;
 
-  const actualMode = mode === "wildcard" ? resolveWildcardMode(cur) : mode;
   const ns = nodeState(cur.id);
 
-  if (modeNeedsAR(actualMode) && !ns.arVerified) {
-    speak("Verification required first for this mission.");
-    showRewardPopup(
-      "AR REQUIRED",
-      `${MODE_META[actualMode]?.label || actualMode} needs AR first`
-    );
-    return;
-  }
-
-  if (ns.completedModes.includes(actualMode)) {
-    speak("Mode already completed here. Choose a different mode.");
+  if (!ns.arVerified) {
+    speak("Verification required first.");
     return;
   }
 
   const allowed = allowedModesFor(cur);
-  if (allowed && !allowed.includes(actualMode) && mode !== "wildcard") {
+  if (allowed && !allowed.includes(mode)) {
     speak("This mode is locked at this node.");
     return;
   }
 
+  if (ns.completedModes.includes(mode)) {
+    speak("Mode already completed here. Choose a different mode.");
+    return;
+  }
+
   const tier = difficultyTier();
-  const q = getQA(cur.id, actualMode, tier, state.session.qaSalt);
+  const wildcard = maybeWildcard();
+  const q = wildcard || getQA(cur.id, mode, tier, state.session.qaSalt);
 
   activeTask = {
-    displayMode: mode,
-    mode: actualMode,
+    mode,
     requiresPass: true,
     passed: false,
     rewardedOnPass: false,
+    pendingReward: 0,
     prompt: q.q,
     options: q.options,
     answerIndex: q.answer,
@@ -1299,14 +1250,12 @@ function launchMode(mode) {
   };
 
   if ($("task-title")) {
-    $("task-title").innerText = `${
-      MODE_META[mode]?.label || actualMode.toUpperCase()
-    } @ ${cur.n}`;
+    $("task-title").innerText = `${mode.toUpperCase()} @ ${cur.n}`;
   }
   if ($("task-desc")) $("task-desc").innerText = activeTask.prompt;
 
   renderOptions(activeTask);
-  showRewardPanel(state.pendingReward > 0);
+  showRewardPanel(false);
 
   if ($("task-feedback")) {
     $("task-feedback").style.display = "none";
@@ -1315,7 +1264,6 @@ function launchMode(mode) {
 
   toggleM("quest-modal", false);
   toggleM("task-modal", true);
-
   speak(activeTask.prompt);
 }
 
@@ -1323,86 +1271,39 @@ function renderOptions(task) {
   const wrap = $("task-options");
   if (!wrap) return;
 
-  wrap.innerHTML = "";
-  (task.options || []).forEach((opt, idx) => {
-    const btn = document.createElement("button");
-    btn.className = "mcq-btn";
-    btn.innerText = `${String.fromCharCode(65 + idx)}) ${opt}`;
-    btn.addEventListener("click", () => selectOption(idx));
-    wrap.appendChild(btn);
+  wrap.innerHTML = (task.options || [])
+    .map(
+      (opt, idx) => `
+        <button class="mcq-btn" data-idx="${idx}">
+          ${String.fromCharCode(65 + idx)}) ${opt}
+        </button>
+      `
+    )
+    .join("");
+
+  wrap.querySelectorAll(".mcq-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = parseInt(btn.dataset.idx, 10);
+      selectOption(idx);
+    });
   });
 }
 
 function selectOption(idx) {
   if (!activeTask) return;
 
-  // AI activity branch
-  if (activeTask.mode === "activity" && activeTask.meta?.ai === true) {
+  if (
+    AI_VERIFY_ENABLED &&
+    activeTask.mode === "activity" &&
+    activeTask.meta?.ai === true
+  ) {
     if (idx === 0) {
       toggleM("task-modal", false);
-      openAI(activeTask.meta.template || "still", {
-        pinId: cur?.id,
-        pinName: cur?.n,
-        child: activeTask.meta.child || "Both",
-        taskLabel: activeTask.meta.label || "Pose Challenge",
-        hint: activeTask.meta.hint || "Copy the pose, then press CAPTURE.",
-        voice: activeTask.meta.voice || "Copy the pose, then press capture.",
-      });
-      return;
-    }
-    if (idx === 2 || idx === 3) {
-      activeTask.passed = true;
-      if ($("task-feedback")) {
-        $("task-feedback").style.display = "block";
-        $("task-feedback").innerText =
-          idx === 2 ? "Skipped." : "Marked unsafe. Good call.";
-      }
-      speak("Okay.");
-      return;
-    }
-    if (idx === 1) {
-      speak("No worries. Start when ready.");
+      openAI();
       return;
     }
   }
 
-  // Simple task modes
-  if (["battle", "speed", "family", "activity"].includes(activeTask.mode)) {
-    const doneIndex = 0;
-    const skipIndex = 2;
-    const unsafeIndex = 3;
-
-    if (idx === doneIndex) {
-      activeTask.passed = true;
-      grantPassBonusOnce();
-      if ($("task-feedback")) {
-        $("task-feedback").style.display = "block";
-        $("task-feedback").innerText = `Completed. Reward ready. ${
-          activeTask.fact || ""
-        }`;
-      }
-      celebrateCorrect(activeTask.fact || "Challenge complete!");
-      return;
-    }
-
-    if (idx === skipIndex || idx === unsafeIndex) {
-      activeTask.passed = true;
-      if ($("task-feedback")) {
-        $("task-feedback").style.display = "block";
-        $("task-feedback").innerText =
-          idx === skipIndex ? "Skipped." : "Marked unsafe. Good call.";
-      }
-      return;
-    }
-
-    if ($("task-feedback")) {
-      $("task-feedback").style.display = "block";
-      $("task-feedback").innerText = "Not yet. Complete it first.";
-    }
-    return;
-  }
-
-  // Health mode
   if (activeTask.mode === "health") {
     if (idx === 0) {
       const char = getCharacter();
@@ -1417,6 +1318,7 @@ function selectOption(idx) {
       speak("Tracking started. Keep walking.");
       return;
     }
+
     if (idx === 1) {
       healthActive = false;
       speak("Health tracking cancelled.");
@@ -1424,7 +1326,46 @@ function selectOption(idx) {
     }
   }
 
-  // Normal MCQ modes
+  if (
+    activeTask.mode === "battle" ||
+    activeTask.mode === "speed" ||
+    activeTask.mode === "family" ||
+    activeTask.mode === "activity"
+  ) {
+    if (idx === 0) {
+      activeTask.passed = true;
+      activeTask.pendingReward = PASS_BONUS_COINS;
+
+      if ($("task-feedback")) {
+        $("task-feedback").style.display = "block";
+        $("task-feedback").innerText = activeTask.fact || "Completed. Reward ready.";
+      }
+
+      celebrateCorrect(activeTask.fact || "Completed.");
+      showRewardPanel(true);
+      return;
+    }
+
+    if (idx === 1) {
+      if ($("task-feedback")) {
+        $("task-feedback").style.display = "block";
+        $("task-feedback").innerText = "Not yet.";
+      }
+      return;
+    }
+
+    if (idx === 2 || idx === 3) {
+      activeTask.passed = true;
+      activeTask.pendingReward = 0;
+      if ($("task-feedback")) {
+        $("task-feedback").style.display = "block";
+        $("task-feedback").innerText = idx === 2 ? "Skipped." : "Marked unsafe.";
+      }
+      showRewardPanel(false);
+      return;
+    }
+  }
+
   const correct = idx === activeTask.answerIndex;
 
   if ($("task-feedback")) {
@@ -1435,37 +1376,54 @@ function selectOption(idx) {
   }
 
   if (correct) {
-    activeTask.passed = true;
-    grantPassBonusOnce();
+    activeTask.pendingReward = activeTask.meta?.rewardCoins || PASS_BONUS_COINS;
     celebrateCorrect(activeTask.fact || "Nice work!");
     speak(voiceLine("correct"));
+    showRewardPanel(true);
   } else {
     warnTryAgain();
     speak("Not quite. Try again.");
   }
+
+  activeTask.passed = correct;
 }
 
 function finishMode() {
   if (!cur || !activeTask) return;
+
   if (activeTask.requiresPass && !activeTask.passed) {
     speak("You must complete this mode first.");
     return;
   }
 
   const ns = nodeState(cur.id);
-  if (!ns.completedModes.includes(activeTask.mode)) {
-    ns.completedModes.push(activeTask.mode);
-  }
+  ns.completedModes.push(activeTask.mode);
+  completeMissionProgress();
+  save();
 
   const mult = getCharacter().pointsMult ?? 1.0;
-  addPendingReward(Math.round(MODE_COMPLETE_COINS * mult));
+  const gain = Math.round(100 * mult);
+  activeTask.pendingReward = (activeTask.pendingReward || 0) + gain;
 
   if (activeTask.meta?.familyChain) {
-    addPendingReward(activeTask.meta.rewardCoins || 150);
+    const bonus = activeTask.meta.rewardCoins || 150;
+    activeTask.pendingReward = (activeTask.pendingReward || 0) + bonus;
+
+    if ($("task-feedback")) {
+      $("task-feedback").style.display = "block";
+      $("task-feedback").innerText = `FAMILY CHAIN COMPLETE!\nBonus ready to award\n${
+        activeTask.meta.badge || "Family Badge"
+      } unlocked`;
+    }
+
+    speak("Family chain complete. Choose who gets the reward.");
+    showRewardPanel(true);
   }
 
-  save();
-  showRewardPanel(true);
+  if (activeTask.meta?.wildcard) {
+    showRewardPanel(true);
+    speak("Wildcard complete. Choose who gets the reward.");
+  }
 
   const req = requiredModesFor(cur);
   if (req) {
@@ -1479,6 +1437,8 @@ function finishMode() {
     speak("Mission secure.");
   }
 
+  toggleM("task-modal", false);
+
   const need = getEffectiveCaptureNeed(cur);
   const reqModes = requiredModesFor(cur);
   const reqOk = reqModes
@@ -1487,14 +1447,12 @@ function finishMode() {
 
   if (ns.completedModes.length >= need && reqOk) {
     captureNode(cur);
-    return;
+  } else {
+    openQuest();
   }
-
-  toggleM("task-modal", false);
-  openQuest();
 }
 
-// ===== CAPTURE =====
+// ===== CAPTURE + COOLDOWN =====
 function captureNode(pin) {
   const ns = nodeState(pin.id);
   ns.cooldownUntil = Date.now() + getEffectiveCooldownMs(pin);
@@ -1507,18 +1465,18 @@ function captureNode(pin) {
     delete activeMarkers[pin.id];
   }
 
-  addPendingReward(CAPTURE_BONUS_COINS);
   save();
 
   const rule = getPinRule(pin);
   const mins = rule?.cooldownMin ?? state.rules?.cooldownMin ?? 10;
-
   celebrateCapture(mins);
+
   showRewardPopup(
     "CAPTURE REWARD READY",
     `Choose who gets +${CAPTURE_BONUS_COINS} coins`
   );
 
+  state.pendingCaptureReward = CAPTURE_BONUS_COINS;
   toggleM("task-modal", true);
   showRewardPanel(true);
   toggleM("quest-modal", false);
@@ -1532,7 +1490,7 @@ function updateCaptureHud() {
   if (!hud) return;
 
   if (!cur) {
-    hud.innerText = "CAPTURE: —";
+    hud.innerText = "CAPTURE: -";
     return;
   }
 
@@ -1558,7 +1516,7 @@ function renderHomeLog() {
   let locked = 0;
   const rows = [];
 
-  PINS.forEach((p) => {
+  getVisiblePins().forEach((p) => {
     const ns = nodeState(p.id);
     const onCd = ns.cooldownUntil && now < ns.cooldownUntil;
     const doneCount = ns.completedModes?.length || 0;
@@ -1579,7 +1537,7 @@ function renderHomeLog() {
     rows.push({ name: p.n, status });
   });
 
-  sum.innerHTML = `Pins: <b>${PINS.length}</b> | Active/seen: <b>${completed}</b> | Locked: <b>${locked}</b> | Kylan: <b>${state.k}</b> | Piper: <b>${state.p}</b> | KHYL: <b>${state.khyl}</b>`;
+  sum.innerHTML = `Pins: <b>${getVisiblePins().length}</b> | Active/seen: <b>${completed}</b> | Locked: <b>${locked}</b> | Kylan: <b>${state.k}</b> | Piper: <b>${state.p}</b> | KHYL: <b>${state.khyl}</b> | Rank: <b>${getRank()}</b>`;
 
   list.innerHTML = rows
     .map(
@@ -1592,13 +1550,30 @@ function renderHomeLog() {
     .join("");
 }
 
+// ===== SMALL UI ADDITIONS =====
+function injectRankHud() {
+  if ($("rank-hud")) return;
+  const coinHud = $("coin-hud");
+  if (!coinHud) return;
+
+  const div = document.createElement("div");
+  div.id = "rank-hud";
+  div.style.marginTop = "6px";
+  div.style.fontSize = "12px";
+  div.style.color = "var(--gold)";
+  coinHud.appendChild(div);
+  updateRankHud();
+}
+
 // ===== BOOT =====
 function boot() {
   try {
     wireHUD();
     wireAR();
+    injectRankHud();
     initMap();
     wireModes();
+    updateRank();
     save();
     ensureRewardLayer();
     speak(voiceLine("welcome"));
@@ -1606,7 +1581,7 @@ function boot() {
   } catch (err) {
     console.error("Boot error:", err);
     if ($("capture-hud")) {
-      $("capture-hud").innerText = "BOOT ERROR — check console";
+      $("capture-hud").innerText = "BOOT ERROR - check console";
     }
   }
 }
