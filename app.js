@@ -1314,11 +1314,16 @@ function setMapMode(mode) {
 ========================================================= */
 
 function wireHUD() {
-  onClick("btn-home", () => {
-    renderHomeLog();
-    toggleM("home-modal", true);
-  });
-
+ 
+onClick("btn-home", () => {
+  toggleM("quest-modal", false);
+  toggleM("task-modal", false);
+  toggleM("home-modal", false);
+  toggleM("commander-hub", false);
+  toggleM("settings-modal", false);
+  toggleM("start-modal", true);
+});
+   
   onClick("btn-home-close", () => toggleM("home-modal", false));
   onClick("btn-home-close-x", () => toggleM("home-modal", false));
 
@@ -1527,3 +1532,4 @@ function boot() {
 }
 
 window.addEventListener("DOMContentLoaded", boot);
+
