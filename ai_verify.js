@@ -1,4 +1,3 @@
-
 // ai_verify.js
 // Lightweight “pose verification” using MediaPipe Pose + camera.
 // - Runs in-browser
