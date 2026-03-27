@@ -57,8 +57,14 @@ function combinePools(...pools) {
   return uniqBy(pools.flat().filter(Boolean), (item) => {
     if (typeof item === "string") return `str:${item}`;
     if (item?.id) return `id:${item.id}`;
-    if (item?.q && Array.isArray(item?.options)) return `mcq:${item.q}`;
-    if (item?.q && item?.a) return `riddle:${item.q}|${item.a}`;
+    if (item?.q && Array.isArray(item?.options))
+      return `mcq:${
+        typeof item.q === "string" ? item.q : JSON.stringify(item.q)
+      }`;
+    if (item?.q && item?.a)
+      return `riddle:${
+        typeof item.q === "string" ? item.q : JSON.stringify(item.q)
+      }|${item.a}`;
     return JSON.stringify(item);
   });
 }
@@ -71,14 +77,26 @@ function slugify(value = "") {
     .slice(0, 80);
 }
 
+function getTieredText(value, tier = "kid") {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    return value[tier] || value.kid || Object.values(value)[0] || "";
+  }
+  return "";
+}
+
 function makeQuestionId(prefix, entry) {
   if (entry?.id) return String(entry.id);
   if (typeof entry === "string") return `${prefix}_${slugify(entry)}`;
   if (entry?.q && Array.isArray(entry?.options)) {
-    return `${prefix}_${slugify(entry.q)}`;
+    const qText =
+      typeof entry.q === "string" ? entry.q : getTieredText(entry.q, "kid");
+    return `${prefix}_${slugify(qText)}`;
   }
   if (entry?.q && entry?.a) {
-    return `${prefix}_${slugify(entry.q)}_${slugify(entry.a)}`;
+    const qText =
+      typeof entry.q === "string" ? entry.q : getTieredText(entry.q, "kid");
+    return `${prefix}_${slugify(qText)}_${slugify(entry.a)}`;
   }
   return `${prefix}_item`;
 }
@@ -127,127 +145,297 @@ function makeFallbackTask(message, meta = {}) {
 ========================================================= */
 
 export const RIDDLE_POOL = [
-  { q: "What has keys but can’t open locks?", a: "A piano" },
-  { q: "What has hands but can’t clap?", a: "A clock" },
-  { q: "What gets wetter the more it dries?", a: "A towel" },
-  { q: "I go up and down but never move. What am I?", a: "Stairs" },
-  { q: "What has one eye but can’t see?", a: "A needle" },
-  { q: "What has a neck but no head?", a: "A bottle" },
-  { q: "What runs but never walks?", a: "Water" },
-  { q: "What has many teeth but cannot bite?", a: "A comb" },
-  { q: "What can you catch but not throw?", a: "A cold" },
   {
-    q: "The more you take, the more you leave behind. What am I?",
+    q: {
+      kid: "What has keys all over it, but still can’t open locks?",
+      teen: "What has loads of keys but is useless at opening locks?",
+      adult: "What has many keys, but none of them can open a lock?",
+    },
+    a: "A piano",
+  },
+  {
+    q: {
+      kid: "What has hands but never gives you a high five?",
+      teen: "What has hands but can’t clap, wave, or fight?",
+      adult: "What has hands, but can’t clap, hold, or touch?",
+    },
+    a: "A clock",
+  },
+  {
+    q: {
+      kid: "What gets wetter every time it helps dry something?",
+      teen: "What’s meant to dry things… but ends up wetter instead?",
+      adult: "What is used for drying, yet becomes wetter with use?",
+    },
+    a: "A towel",
+  },
+  {
+    q: {
+      kid: "What do you go up and down on, but it stays in the same place?",
+      teen: "What do people go up and down on all day, but it never moves?",
+      adult: "What is used for movement up and down, but never moves itself?",
+    },
+    a: "Stairs",
+  },
+  {
+    q: {
+      kid: "What has one eye, but can’t see at all?",
+      teen: "What has one eye but is completely blind?",
+      adult: "What has an eye, yet lacks all ability to see?",
+    },
+    a: "A needle",
+  },
+  {
+    q: {
+      kid: "What has a neck but no head?",
+      teen: "What has a neck, but no head at all?",
+      adult: "What has a neck, yet no head?",
+    },
+    a: "A bottle",
+  },
+  {
+    q: {
+      kid: "What can run, but doesn’t have legs?",
+      teen: "What runs but has no legs at all?",
+      adult: "What runs, but has no physical form to walk?",
+    },
+    a: "Water",
+  },
+  {
+    q: {
+      kid: "What has lots of teeth but doesn’t bite?",
+      teen: "What has loads of teeth but is harmless?",
+      adult: "What has numerous teeth, but no ability to bite?",
+    },
+    a: "A comb",
+  },
+  {
+    q: {
+      kid: "What can you catch, but never throw?",
+      teen: "What can you catch, but you definitely can’t throw back?",
+      adult: "What can be caught, yet cannot be thrown?",
+    },
+    a: "A cold",
+  },
+  {
+    q: {
+      kid: "The more you take, the more you leave behind. What am I?",
+      teen: "The more you take, the more you leave behind — what is it?",
+      adult: "The more you take, the more you leave behind. What are they?",
+    },
     a: "Footsteps",
   },
-  { q: "What comes down but never goes up?", a: "Rain" },
-  { q: "What has cities but no houses?", a: "A map" },
-  { q: "What can fill a room but takes up no space?", a: "Light" },
-  { q: "What goes up but never comes down?", a: "Your age" },
-  { q: "What is full of holes but still holds water?", a: "A sponge" },
-  { q: "What is always coming but never arrives?", a: "Tomorrow" },
-  { q: "What can’t be used until it’s broken?", a: "An egg" },
-  { q: "What disappears when you say its name?", a: "Silence" },
-  { q: "What has a ring but no finger?", a: "A phone" },
-  { q: "What has branches but no leaves?", a: "A bank" },
+  {
+    q: {
+      kid: "What comes down, but never goes back up?",
+      teen: "What falls down, but never rises back up?",
+      adult: "What comes down, yet never returns upward?",
+    },
+    a: "Rain",
+  },
+  {
+    q: {
+      kid: "What has lots of cities, but no houses?",
+      teen: "What has cities all over it, but no actual houses?",
+      adult: "What contains cities, yet no houses?",
+    },
+    a: "A map",
+  },
+  {
+    q: {
+      kid: "What can fill a whole room, but doesn’t take up any space?",
+      teen: "What can fill a room completely, but takes up no space at all?",
+      adult: "What can fill an entire room, yet occupies no space?",
+    },
+    a: "Light",
+  },
+  {
+    q: {
+      kid: "What goes up every year, but never comes back down?",
+      teen: "What keeps going up, but never drops back down?",
+      adult: "What increases steadily, yet never decreases?",
+    },
+    a: "Your age",
+  },
+  {
+    q: {
+      kid: "What is full of holes, but still holds water?",
+      teen: "What’s covered in holes, but still manages to hold water?",
+      adult: "What is full of holes, yet still retains water?",
+    },
+    a: "A sponge",
+  },
+  {
+    q: {
+      kid: "What is always coming, but never actually gets here?",
+      teen: "What’s always on the way, but never really arrives?",
+      adult: "What is always approaching, yet never truly arrives?",
+    },
+    a: "Tomorrow",
+  },
+  {
+    q: {
+      kid: "What can’t be used until it’s broken?",
+      teen: "What only becomes useful after you break it?",
+      adult: "What cannot be used until it has been broken?",
+    },
+    a: "An egg",
+  },
+  {
+    q: {
+      kid: "What disappears as soon as you say its name?",
+      teen: "What vanishes the moment you say it out loud?",
+      adult: "What disappears the instant its name is spoken?",
+    },
+    a: "Silence",
+  },
+  {
+    q: {
+      kid: "What has a ring, but no finger?",
+      teen: "What has a ring, but never goes on your hand?",
+      adult: "What has a ring, yet no finger?",
+    },
+    a: "A phone",
+  },
+  {
+    q: {
+      kid: "What has branches, but no leaves?",
+      teen: "What has branches, but none of them grow leaves?",
+      adult: "What has branches, yet no leaves?",
+    },
+    a: "A bank",
+  },
 ];
 
 export const SPEED_POOL = {
   kid: [
-    "10-Second Scan: Point to the nearest tree, sign, or bench.",
-    "Quick Smile: Do your best explorer face.",
-    "Hop Count: Hop 3 times safely.",
-    "Fast Balance: Balance on one foot for 5 seconds.",
-    "Find a Number: Spot any number quickly.",
-    "Traffic Light: Freeze, walk, slow.",
+    "Point to the nearest tree, sign, or bench.",
+    "Can you stand on one foot without wobbling?",
+    "Look around… now tell me what you saw!",
+    "Pull your silliest face!",
+    "Close your eyes — what can you hear?",
+    "Give this place a fun name.",
+    "Wait… GO! Clap as fast as you can!",
+    "Show me where you would go to leave this area.",
+    "Find something that might not be safe here.",
+    "Pick: coins, clue, or bonus!",
+    "Be a statue… don’t move!",
+    "Bounce 3 times like a spring!",
   ],
   teen: [
-    "Main Character Walk: 10 steps like you’re in a trailer.",
-    "Sound ID: Name the loudest sound you hear.",
-    "Speed Slogan: Invent a slogan for this place.",
-    "Speed Memory: Look, turn away, name 3 things.",
-    "Walk Like: Pirate, robot, or ninja.",
-    "Boss Weakness: Pick a weakness fast.",
+    "Quickly point out 3 things around you.",
+    "Hold a one-foot balance — no wobbling allowed.",
+    "Scan, turn, recall — name 3 things.",
+    "Give your best dramatic face.",
+    "Pause and listen — what stands out most?",
+    "Invent a quick slogan for this spot.",
+    "Wait for it… GO! React instantly.",
+    "Point to the fastest way out of here.",
+    "What’s one thing here that could be risky?",
+    "Choose fast: coins, clue, or power-up.",
+    "Go completely still — statue mode.",
+    "3 fast jumps — no delay.",
   ],
   adult: [
-    "30-Second Observation: Name 3 details you’d miss if you rushed.",
-    "Fast Risk Check: Name 1 hazard and 1 safe alternative.",
-    "3-Point Scan: Exits, hazards, meeting point.",
-    "Atmosphere Read: Peaceful, tense, busy, eerie.",
-    "Detective Eye: What could hide a code here?",
-    "Reward Logic: Coins, clue, map fragment, or key?",
+    "Identify 3 nearby features within 10 seconds.",
+    "Hold a stable one-foot balance position.",
+    "Perform a quick scan, then recall 3 details accurately.",
+    "Display a bold or exaggerated expression.",
+    "Pause briefly and identify the most noticeable sound.",
+    "Create a concise description of this location.",
+    "Delay, then react immediately on cue.",
+    "Indicate the most efficient exit route.",
+    "Identify one potential risk in the environment.",
+    "Make a quick choice: reward, clue, or advantage.",
+    "Enter full stillness — no movement.",
+    "Execute 3 rapid jumps without pause.",
   ],
 };
 
 export const BATTLE_POOL = {
-  kid: [
-    "Race: First to point at something green wins.",
-    "Balance Duel: Who can stand on one foot longest?",
-    "Rock-paper-scissors battle.",
-    "Pose Duel: Best superhero pose wins.",
-    "Statue Battle: Last person to move wins.",
-  ],
-  teen: [
-    "Reaction Duel: Leader claps, first to clap back wins.",
-    "Speed Debate: Best 3-word slogan wins.",
-    "Stealth Walk: Quietest 10 steps wins.",
-    "Memory Flash: Name 3 things after a quick look.",
-    "Victory Pose Duel.",
-  ],
-  adult: [
-    "Observation Duel: First to name 3 details wins.",
-    "Logic Duel: First correct answer wins.",
-    "Strategy Duel: Best plan in one sentence wins.",
-    "Perspective Duel: Best insight wins.",
-    "Route Planning Duel.",
-  ],
+  kid: [],
+  teen: [],
+  adult: [],
 };
 
 export const FAMILY_POOL = {
   kid: [
-    "Team Wave: Everyone do a big explorer wave together.",
-    "Animal Parade: Each person do a different animal pose.",
-    "Explorer Echo: One says mission, the others say accepted.",
-    "Superhero Group Pose: Make a family hero pose.",
-    "Victory Cheer: Make a family cheer together.",
+    "Everyone do the same silly walk together — no one can laugh!",
+    "Surprise hug! Everyone in at once!",
+    "Tap everyone’s shoulder — GO!",
+    "Link up fast — don’t let the chain break!",
+    "Act like a chicken for 5 seconds — LOUDLY!",
+    "Say the weirdest word you can think of!",
+    "Be a robot, pirate, or wizard — GO!",
+    "Walk like a superhero… but WAY too dramatic!",
   ],
   teen: [
-    "Team Trailer Walk: 10 steps like your squad is in a game intro.",
-    "Role Select: Pick roles fast — Scout, Tank, Healer, Guide.",
-    "One-Line Team Motto: Invent a squad motto fast.",
-    "Fast Memory Team: Name 3 things together.",
-    "Group Win Pose: Final team victory pose.",
+    "Move as a group doing the same ridiculous walk — stay in sync.",
+    "Instant group hug — no warning, just go.",
+    "Quick shoulder tap across the group — move fast.",
+    "Link quickly — maintain full connection under pressure.",
+    "Full animal mode — no holding back.",
+    "Invent a nonsense phrase and shout it.",
+    "Pick a role instantly — act it out.",
+    "Over-the-top hero walk — no shame allowed.",
   ],
   adult: [
-    "Family Check-In: Each person says one word for how they feel.",
-    "Micro-Reflection: Name one thing you noticed because you slowed down.",
-    "Safety Scan: Identify a meeting point nearby.",
-    "Quick Gratitude: Each person name one good thing about today.",
-    "Respect Check: How do we explore this place respectfully?",
+    "Perform a synchronised exaggerated walk together — maintain coordination.",
+    "Immediate group embrace — brief and natural.",
+    "Light shoulder tap across the group — quick connection.",
+    "Rapid link formation — maintain cohesion.",
+    "Perform a loud, exaggerated animal impression.",
+    "Create and project a ridiculous phrase.",
+    "Assume a character — commit briefly.",
+    "Perform an exaggerated heroic walk — fully commit.",
   ],
 };
 
 export const ACTIVITY_POOL = {
   kid: [
-    "Do an explorer pose for 5 seconds.",
-    "Pretend to steer a ship.",
-    "Give a respectful salute.",
-    "Spot something colourful.",
-    "Do a mini goal celebration.",
+    "You’re the captain now — steer your ship!",
+    "Stand tall and give your best salute!",
+    "Find the brightest thing you can see!",
+    "Celebrate like you just beat a boss!",
+    "GO! First to touch a tree, bench, or sign wins!",
+    "One leads — everyone copy them!",
+    "Do the silliest walk you can!",
+    "Shout a funny word!",
+    "Everyone together — don’t break the chain!",
+    "GO! Do 3 things in a row as fast as you can!",
+    "GO! First to touch something metal wins!",
+    "Who can clap 3 times the fastest?",
+    "GO! Follow the leader — don’t get left behind!",
   ],
   teen: [
-    "Do a 10-second main character walk.",
-    "Make up a 1-line slogan for this spot.",
-    "Do a stealth-walk 10 steps.",
-    "Invent a fake legend about this place.",
-    "Do a silent NPC idle animation.",
+    "You’re in control — act like you’re steering something big.",
+    "Give a clean, sharp salute.",
+    "What stands out the most here?",
+    "Hit a victory pose like you just won.",
+    "GO — first to reach a tree, bench, or sign wins.",
+    "Pick a leader — everyone mirrors them.",
+    "Do the most ridiculous walk you can think of.",
+    "Say something random or weird out loud.",
+    "Stay linked — no one breaks formation.",
+    "GO — complete 3 actions back-to-back, fast.",
+    "GO — first to find and touch something metal wins.",
+    "First to clap 3 times wins.",
+    "GO — stay with the leader, no gaps.",
   ],
   adult: [
-    "Notice 3 details most people would miss here.",
-    "10 seconds silence, then say one word.",
-    "Narrate this place like a vlog intro.",
-    "Imagine this place 800 years ago. What changes?",
-    "If this was a battle arena, what's the boss?",
+    "Simulate controlling a vehicle or vessel.",
+    "Perform a respectful gesture.",
+    "Identify the most visually prominent feature.",
+    "Celebrate like you’ve just won.",
+    "On signal, reach a nearby object — tree, bench, or sign.",
+    "One person leads, others mirror the movement.",
+    "Perform a deliberately exaggerated or comedic walk.",
+    "Say something unusual out loud.",
+    "Maintain group formation while moving.",
+    "On signal, execute 3 rapid actions in sequence.",
+    "On signal, reach and touch a metal object.",
+    "Complete 3 claps — fastest wins.",
+    "On signal, follow the leader without losing pace.",
   ],
 };
 
@@ -2118,10 +2306,11 @@ function makeMcqFromRiddle(riddle, tier = "kid", salt = 0, forcedId = null) {
 
   const shuffled = shuffleSeeded(options, salt);
   const answer = shuffled.indexOf(correct);
+  const riddleText = getTieredText(riddle.q, tier);
 
   return {
     id: forcedId || riddle.id || makeQuestionId("logic", riddle),
-    q: riddle.q,
+    q: riddleText,
     options: shuffled,
     answer,
     fact: riddle.a,
