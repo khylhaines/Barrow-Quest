@@ -1,5 +1,5 @@
 import { PINS } from "./pins.js";
-import { getQA } from "./qa.js";
+import { getQA, getPinStartIntro } from "./qa.js";
 import { ADULT_PINS } from "./adult_pins.js";
 import { ADULT_CONTENT } from "./adult_content.js";
 import { applyReward } from "./progression.js";
@@ -7,7 +7,7 @@ import { getRandomMystery } from "./mysteries.js";
 
 const $ = (id) => document.getElementById(id);
 
-const SAVE_KEY = "bq_world_v10";
+const SAVE_KEY = "bq_world_v11";
 
 const DEFAULT_STATE = {
   players: [
@@ -17,22 +17,24 @@ const DEFAULT_STATE = {
     { id: "p4", name: "Player 4", coins: 0, enabled: false },
   ],
   activePlayerId: "p1",
-
-  mapMode: "core", // core | park | abbey
-  activePack: "classic", // classic | adult
-  activeAdultCategory: null, // true_crime | conspiracy | history
-  tierMode: "kid", // kid | teen | adult | auto
-
+  mapMode: "core",
+  activePack: "classic",
+  activeAdultCategory: null,
+  tierMode: "kid",
   unlockedMysteries: [],
   completedQuestionIds: [],
   purchasedItems: [],
   inventory: {},
-
+  completedPins: {},
+  pinStats: {
+    totalCompleted: 0,
+    totalFirstCompletions: 0,
+    totalRepeatCompletions: 0,
+  },
   meta: {
     xp: 0,
     tokens: 0,
   },
-
   settings: {
     radius: 35,
     voicePitch: 1,
@@ -109,6 +111,30 @@ const CHARACTER_ICONS = {
   kylan: "kylan.jpg",
   piper: "piper.jpg",
 };
+
+const CLASSIC_MODE_META = {
+  quiz: { label: "QUIZ", icon: "❓" },
+  history: { label: "HISTORY", icon: "📜" },
+  logic: { label: "LOGIC", icon: "🧩" },
+  activity: { label: "ACTIVITY", icon: "🎯" },
+  family: { label: "FAMILY", icon: "👨‍👩‍👧" },
+  speed: { label: "SPEED", icon: "⚡" },
+  ghost: { label: "GHOST", icon: "👻" },
+  boss: { label: "BOSS", icon: "👑" },
+  discovery: { label: "DISCOVERY", icon: "🔎" },
+};
+
+const CLASSIC_MODE_ORDER = [
+  "quiz",
+  "history",
+  "logic",
+  "activity",
+  "family",
+  "speed",
+  "ghost",
+  "boss",
+  "discovery",
+];
 
 /* ============================
    SPEECH / NARRATOR
@@ -193,6 +219,14 @@ function loadState() {
         parsed.inventory && typeof parsed.inventory === "object"
           ? parsed.inventory
           : {},
+      completedPins:
+        parsed.completedPins && typeof parsed.completedPins === "object"
+          ? parsed.completedPins
+          : {},
+      pinStats: {
+        ...structuredClone(DEFAULT_STATE.pinStats),
+        ...(parsed.pinStats || {}),
+      },
       meta: {
         ...structuredClone(DEFAULT_STATE.meta),
         ...(parsed.meta || {}),
@@ -205,6 +239,122 @@ function loadState() {
 
 function saveState() {
   localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+}
+
+/* ============================
+   PROGRESSION / COMPLETION
+============================ */
+function getLevelFromXP(xp) {
+  const safeXp = Math.max(0, Number(xp || 0));
+  return Math.floor(safeXp / 100) + 1;
+}
+
+function getLevelProgress(xp) {
+  const safeXp = Math.max(0, Number(xp || 0));
+  return safeXp % 100;
+}
+
+function getPinProgressKey(pin) {
+  if (!pin?.id) return null;
+  const pack = state.activePack || "classic";
+  const mode = state.mapMode || "core";
+  const adult = state.activeAdultCategory || "none";
+  return `${pack}__${mode}__${adult}__${pin.id}`;
+}
+
+function getPinProgress(pin) {
+  const key = getPinProgressKey(pin);
+  if (!key) return null;
+  return state.completedPins[key] || null;
+}
+
+function isPinCompleted(pin) {
+  return !!getPinProgress(pin);
+}
+
+function recordPinCompletion(pin, mode, rewardResult, questionId) {
+  const key = getPinProgressKey(pin);
+  if (!key) return { firstTime: false };
+
+  const existing = state.completedPins[key];
+  const now = new Date().toISOString();
+
+  if (!existing) {
+    state.completedPins[key] = {
+      pinId: pin.id,
+      pinName: pin.n || pin.id,
+      pack: state.activePack,
+      mapMode: state.mapMode,
+      adultCategory: state.activeAdultCategory,
+      firstCompletedAt: now,
+      lastCompletedAt: now,
+      completionCount: 1,
+      completedModes: mode ? [mode] : [],
+      lastQuestionId: questionId || null,
+      lastReward: {
+        coins: Number(rewardResult?.coins || 0),
+        xp: Number(rewardResult?.xp || 0),
+        tokens: Number(rewardResult?.tokens || 0),
+      },
+    };
+
+    state.pinStats.totalCompleted += 1;
+    state.pinStats.totalFirstCompletions += 1;
+
+    return { firstTime: true, record: state.completedPins[key] };
+  }
+
+  existing.lastCompletedAt = now;
+  existing.completionCount = Number(existing.completionCount || 0) + 1;
+  existing.lastQuestionId = questionId || existing.lastQuestionId || null;
+  existing.lastReward = {
+    coins: Number(rewardResult?.coins || 0),
+    xp: Number(rewardResult?.xp || 0),
+    tokens: Number(rewardResult?.tokens || 0),
+  };
+
+  if (mode && !Array.isArray(existing.completedModes)) {
+    existing.completedModes = [mode];
+  } else if (mode && !existing.completedModes.includes(mode)) {
+    existing.completedModes.push(mode);
+  }
+
+  state.pinStats.totalRepeatCompletions += 1;
+  return { firstTime: false, record: existing };
+}
+
+function getCurrentModeProgress() {
+  const pins = getCurrentPins();
+  const total = pins.length;
+  const completed = pins.filter((pin) => isPinCompleted(pin)).length;
+  const remaining = Math.max(0, total - completed);
+  const percent = total ? Math.round((completed / total) * 100) : 0;
+  return { total, completed, remaining, percent };
+}
+
+function getRewardForMission({ mode, correct }) {
+  const base = applyReward({
+    mode,
+    correct,
+  }) || { coins: 25, xp: 10, tokens: 0 };
+
+  const firstTime = currentPin ? !isPinCompleted(currentPin) : false;
+
+  if (firstTime) {
+    return {
+      coins: Number(base.coins || 0),
+      xp: Number(base.xp || 0) + 10,
+      tokens: Number(base.tokens || 0) + 1,
+      firstTime: true,
+    };
+  }
+
+  return {
+    coins: Math.max(5, Math.floor(Number(base.coins || 0) * 0.4)),
+    xp: Math.max(2, Math.floor(Number(base.xp || 0) * 0.4)),
+    tokens: 0,
+    firstTime: false,
+  };
 }
 
 /* ============================
@@ -281,7 +431,7 @@ function renderHUD() {
   const tokens = Number(state.meta?.tokens || 0);
 
   if ($("top-coins")) $("top-coins").innerText = String(coins);
-  if ($("top-xp")) $("top-xp").innerText = String(xp);
+  if ($("top-xp")) $("top-xp").innerText = `L${getLevelFromXP(xp)} • ${xp}`;
   if ($("top-tokens")) $("top-tokens").innerText = String(tokens);
 }
 
@@ -357,6 +507,14 @@ function getModeStart() {
   return [54.11371, -3.218448, 14];
 }
 
+function getClassicWorld(pin) {
+  return String(pin?.set || state.mapMode || "core").toLowerCase();
+}
+
+function getClassicZone(pin) {
+  return String(pin?.zone || pin?.set || state.mapMode || "core").toLowerCase();
+}
+
 function createHeroIcon() {
   const char = state.settings.character || "hero_duo";
   const value = CHARACTER_ICONS[char] || "🧭";
@@ -391,9 +549,35 @@ function createHeroIcon() {
 }
 
 function createPinIcon(pin) {
+  const completed = isPinCompleted(pin);
+  const icon = pin.i || "📍";
+
+  if (completed) {
+    return L.divIcon({
+      className: "marker-logo",
+      html: `
+        <div style="
+          width:38px;
+          height:38px;
+          border-radius:50%;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          background:rgba(77,255,158,0.18);
+          border:2px solid #4dff9e;
+          box-shadow:0 0 0 2px rgba(0,0,0,0.35) inset;
+          font-size:20px;
+          line-height:1;
+        ">✅</div>
+      `,
+      iconSize: [38, 38],
+      iconAnchor: [19, 19],
+    });
+  }
+
   return L.divIcon({
     className: "marker-logo",
-    html: `<div style="font-size:28px;line-height:1;">${pin.i || "📍"}</div>`,
+    html: `<div style="font-size:28px;line-height:1;">${icon}</div>`,
     iconSize: [34, 34],
     iconAnchor: [17, 17],
   });
@@ -423,6 +607,8 @@ function normaliseClassicModeFromPin(pin) {
   const type = String(pin.type || "").toLowerCase();
 
   if (!type || type === "start") return "quiz";
+  if (type === "story") return "history";
+  if (type === "battle") return "activity";
 
   if (
     [
@@ -431,7 +617,6 @@ function normaliseClassicModeFromPin(pin) {
       "logic",
       "activity",
       "family",
-      "battle",
       "speed",
       "ghost",
       "boss",
@@ -441,8 +626,131 @@ function normaliseClassicModeFromPin(pin) {
     return type;
   }
 
-  if (type === "story") return "history";
   return "quiz";
+}
+
+function getClassicModePoolForPin(pin) {
+  const primary = normaliseClassicModeFromPin(pin);
+  const world = getClassicWorld(pin);
+  const zone = getClassicZone(pin);
+  const unique = [];
+
+  const pushUnique = (value) => {
+    if (!value) return;
+    if (!CLASSIC_MODE_META[value]) return;
+    if (!unique.includes(value)) unique.push(value);
+  };
+
+  const worldPools = {
+    core: ["quiz", "history", "logic", "activity", "family", "speed"],
+    park: ["quiz", "history", "activity", "family", "speed", "logic"],
+    abbey: ["history", "quiz", "logic", "activity", "ghost", "family", "speed"],
+  };
+
+  pushUnique(primary);
+
+  if (primary === "boss") {
+    pushUnique("quiz");
+    pushUnique("history");
+    pushUnique("logic");
+  }
+
+  if (primary === "ghost") {
+    pushUnique("logic");
+    pushUnique("history");
+  }
+
+  if (primary === "discovery") {
+    pushUnique("activity");
+    pushUnique("family");
+  }
+
+  if (zone === "memorial") {
+    pushUnique("history");
+    pushUnique("quiz");
+  }
+
+  if (zone === "abbey") {
+    pushUnique("ghost");
+    pushUnique("logic");
+    pushUnique("history");
+  }
+
+  if (zone === "docks") {
+    pushUnique("history");
+    pushUnique("quiz");
+    pushUnique("logic");
+  }
+
+  if (zone === "nature" || zone === "park") {
+    pushUnique("activity");
+    pushUnique("family");
+    pushUnique("speed");
+  }
+
+  (worldPools[world] || worldPools.core).forEach((mode) => pushUnique(mode));
+
+  if (pin?.hidden) pushUnique("discovery");
+  if (primary === "boss") pushUnique("boss");
+  if (primary === "ghost") pushUnique("ghost");
+
+  return unique.filter(Boolean);
+}
+
+function pickClassicModesForPin(pin, count = 4) {
+  const pool = getClassicModePoolForPin(pin);
+  const primary = normaliseClassicModeFromPin(pin);
+  const selected = [];
+
+  const pushUnique = (value) => {
+    if (!value) return;
+    if (!selected.includes(value)) selected.push(value);
+  };
+
+  pushUnique(primary);
+
+  const remaining = pool.filter((mode) => mode !== primary);
+  const shuffled = [...remaining].sort(() => Math.random() - 0.5);
+
+  shuffled.forEach((mode) => {
+    if (selected.length < count) pushUnique(mode);
+  });
+
+  CLASSIC_MODE_ORDER.forEach((mode) => {
+    if (selected.length < count && pool.includes(mode)) pushUnique(mode);
+  });
+
+  return selected.slice(0, count);
+}
+
+function renderClassicModeChoices(pin) {
+  const tiles = Array.from(document.querySelectorAll(".m-tile"));
+  if (!tiles.length) return;
+
+  const chosenModes = pickClassicModesForPin(pin, 4);
+  const chosenSet = new Set(chosenModes);
+
+  tiles.forEach((tile) => {
+    const mode = tile.dataset.mode;
+    if (!mode) return;
+
+    if (mode === "health" || mode === "battle") {
+      tile.classList.add("hidden");
+      return;
+    }
+
+    if (!chosenSet.has(mode)) {
+      tile.classList.add("hidden");
+      return;
+    }
+
+    tile.classList.remove("hidden");
+
+    const meta = CLASSIC_MODE_META[mode];
+    if (meta) {
+      tile.innerHTML = `<span>${meta.icon}</span>${meta.label}`;
+    }
+  });
 }
 
 function clearTaskBlocks() {
@@ -515,6 +823,7 @@ function resetMap() {
   currentPin = null;
 
   initMap();
+  renderHomeLog();
 }
 
 function renderPins() {
@@ -533,12 +842,26 @@ function renderPins() {
     marker.on("click", () => {
       currentPin = pin;
       showActionButton(true);
-      updateCaptureText(`${pin.n} • READY`);
-      speakText(`${pin.n}. Ready.`);
+
+      const completed = isPinCompleted(pin);
+      updateCaptureText(
+        completed ? `${pin.n} • COMPLETED • REPLAY` : `${pin.n} • READY`
+      );
+
+      speakText(
+        completed
+          ? `${pin.n}. Completed already. Replay available.`
+          : `${pin.n}. Ready.`
+      );
     });
 
     activeMarkers[pin.id] = marker;
   });
+}
+
+function refreshPinMarker(pin) {
+  if (!pin || !activeMarkers[pin.id]) return;
+  activeMarkers[pin.id].setIcon(createPinIcon(pin));
 }
 
 function showActionButton(show) {
@@ -600,7 +923,10 @@ function startLocationWatch() {
       currentPin = nearby;
 
       if (nearby) {
-        updateCaptureText(`${nearby.n} • READY`);
+        const completed = isPinCompleted(nearby);
+        updateCaptureText(
+          completed ? `${nearby.n} • COMPLETED • REPLAY` : `${nearby.n} • READY`
+        );
         showActionButton(true);
       } else {
         if (state.activePack === "adult") {
@@ -643,30 +969,34 @@ function openMissionMenu() {
 
   if ($("q-name")) $("q-name").innerText = currentPin.n;
 
+  const completed = isPinCompleted(currentPin);
+
   if ($("quest-status")) {
     $("quest-status").innerText =
       state.activePack === "adult"
         ? `STATUS: CASE MODE • ${String(
             state.activeAdultCategory || "GENERAL"
-          ).toUpperCase()}`
+          ).toUpperCase()}${completed ? " • COMPLETED" : ""}`
         : `STATUS: ${state.mapMode.toUpperCase()} • ${String(
             currentPin.type || "quiz"
-          ).toUpperCase()}`;
+          ).toUpperCase()}${completed ? " • COMPLETED" : ""}`;
   }
 
   if ($("mode-banner")) {
     $("mode-banner").style.display = "block";
 
-    if (state.activePack === "adult") {
-      $("mode-banner").innerText = `CASE BRIEFING\n${currentPin.n}`;
-    } else {
-      $("mode-banner").innerText =
-        state.mapMode === "core"
-          ? `FULL BARROW\n${currentPin.n}`
-          : state.mapMode === "park"
-          ? `PARK\n${currentPin.n}`
-          : `ABBEY\n${currentPin.n}`;
-    }
+    const label =
+      state.activePack === "adult"
+        ? "CASE BRIEFING"
+        : state.mapMode === "core"
+        ? "FULL BARROW"
+        : state.mapMode === "park"
+        ? "PARK"
+        : "ABBEY";
+
+    $("mode-banner").innerText = completed
+      ? `${label}\n${currentPin.n}\nCOMPLETED`
+      : `${label}\n${currentPin.n}`;
   }
 
   if ($("boss-banner")) {
@@ -675,24 +1005,25 @@ function openMissionMenu() {
     $("boss-banner").innerText = isBoss ? "FINAL TRIAL ACTIVE" : "";
   }
 
+  let storyText = "";
+
   if (state.activePack === "adult") {
     const content = getAdultContentForPin(currentPin);
-    const briefing =
-      content?.story ||
-      "Case briefing not found for this location yet. Add story content for this adult pin.";
-    speakText(briefing);
-    showModal("quest-modal");
-    return;
+    storyText =
+      content?.story || "Case briefing not found for this location yet.";
+  } else {
+    storyText =
+      getPinStartIntro(currentPin.id, getEffectiveTier()) ||
+      `${currentPin.n}. Mission briefing ready.`;
+
+    renderClassicModeChoices(currentPin);
   }
 
-  const primaryMode = normaliseClassicModeFromPin(currentPin);
-
-  if (primaryMode) {
-    openTask(primaryMode);
-    return;
+  if ($("q-story")) {
+    $("q-story").innerText = storyText;
   }
 
-  speakText(`${currentPin.n}. Quest menu opened.`);
+  speakText(storyText);
   showModal("quest-modal");
 }
 
@@ -775,7 +1106,7 @@ function openTask(mode) {
       pinId: currentPin.id,
       mode,
       tier,
-      zone: currentPin.set || currentPin.zone || state.mapMode,
+      zone: currentPin.zone || currentPin.set || state.mapMode,
       salt: Date.now(),
       recentQuestionIds: state.completedQuestionIds || [],
     });
@@ -909,12 +1240,15 @@ function renderShop() {
   const coins = active?.coins || 0;
   const xp = Number(state.meta?.xp || 0);
   const tokens = Number(state.meta?.tokens || 0);
+  const level = getLevelFromXP(xp);
+  const levelProgress = getLevelProgress(xp);
 
   summary.innerHTML = `
     <div style="padding:10px;border:1px solid #333;border-radius:12px;background:#111;">
       <strong>${active?.name || "Player"}</strong><br>
       Coins: ${coins} 🪙<br>
-      XP: ${xp}<br>
+      XP: ${xp} (Level ${level})<br>
+      Level Progress: ${levelProgress}/100<br>
       Tokens: ${tokens}
     </div>
   `;
@@ -1031,10 +1365,10 @@ function answerMission(index) {
   }
 
   const active = getActivePlayer();
-  const rewardResult = applyReward({
+  const rewardResult = getRewardForMission({
     mode: currentTask.mode,
     correct: true,
-  }) || { coins: 25, xp: 0, tokens: 0 };
+  });
 
   const rewardCoins = Number(rewardResult.coins || 0);
   const rewardXp = Number(rewardResult.xp || 0);
@@ -1050,34 +1384,47 @@ function answerMission(index) {
   const questionId = q?.meta?.questionId || q?.id || null;
   rememberQuestion(questionId);
 
+  const completion = recordPinCompletion(
+    currentTask.pin,
+    currentTask.mode,
+    rewardResult,
+    questionId
+  );
+
   const mystery = maybeUnlockMystery();
 
   saveState();
   renderHUD();
   renderShop();
+  renderHomeLog();
+  refreshPinMarker(currentTask.pin);
 
   feedback.style.color = "var(--neon)";
 
+  const firstLabel = completion.firstTime
+    ? "NEW LOCATION COMPLETE"
+    : "REPLAY COMPLETE";
+  const rewardLine = `+${rewardCoins} coins +${rewardXp} XP +${rewardTokens} tokens`;
+
   if (mystery) {
     feedback.innerText =
-      `Correct! +${rewardCoins} coins +${rewardXp} XP +${rewardTokens} tokens\n\n` +
+      `${firstLabel}\n${rewardLine}\n\n` +
       `BONUS MYSTERY UNLOCKED\n` +
       `${mystery.icon || "❓"} ${mystery.title}\n\n` +
       `${mystery.story}\n\n` +
       `${mystery.evidence || ""}`;
 
     speakText(
-      `Correct. ${rewardCoins} coins awarded. Bonus mystery unlocked. ${
-        mystery.title
-      }. ${mystery.story}. ${mystery.evidence || ""}`
+      `${firstLabel}. ${rewardCoins} coins awarded. ${rewardXp} experience. Bonus mystery unlocked. ${mystery.title}.`
     );
   } else {
     feedback.innerText =
-      `Correct! +${rewardCoins} coins +${rewardXp} XP +${rewardTokens} tokens\n\n` +
-      `${q.fact || "Mission complete."}`;
+      `${firstLabel}\n${rewardLine}\n\n` + `${q.fact || "Mission complete."}`;
 
     speakText(
-      `Correct. ${rewardCoins} coins awarded. ${q.fact || "Mission complete."}`
+      `${firstLabel}. ${rewardCoins} coins awarded. ${rewardXp} experience. ${
+        q.fact || "Mission complete."
+      }`
     );
   }
 }
@@ -1104,20 +1451,35 @@ function applySettingsToUI() {
 function renderHomeLog() {
   const summary = $("home-summary");
   const list = $("home-list");
-
   if (!summary || !list) return;
 
   const pins = getCurrentPins();
   const mysteryCount = state.unlockedMysteries?.length || 0;
   const completedCount = state.completedQuestionIds?.length || 0;
+  const currentProgress = getCurrentModeProgress();
+  const xp = Number(state.meta?.xp || 0);
+  const level = getLevelFromXP(xp);
+  const levelProgress = getLevelProgress(xp);
 
-  summary.innerText =
-    `Pins loaded: ${pins.length} • ` +
-    `Pack: ${state.activePack} • ` +
-    `Mode: ${state.mapMode} • ` +
-    `Tier: ${getEffectiveTier()} • ` +
-    `Mysteries unlocked: ${mysteryCount} • ` +
-    `Completed prompts tracked: ${completedCount}`;
+  summary.innerHTML = `
+    <div style="padding:12px;border:1px solid #444;border-radius:14px;background:#111;line-height:1.6;">
+      <div><strong>LEVEL:</strong> ${level}</div>
+      <div><strong>XP:</strong> ${xp} (${levelProgress}/100 to next level)</div>
+      <div><strong>PACK:</strong> ${state.activePack}</div>
+      <div><strong>MODE:</strong> ${state.mapMode}</div>
+      <div><strong>TIER:</strong> ${getEffectiveTier()}</div>
+      <div><strong>PINS LOADED:</strong> ${pins.length}</div>
+      <div><strong>MODE COMPLETED:</strong> ${currentProgress.completed}/${
+    currentProgress.total
+  } (${currentProgress.percent}%)</div>
+      <div><strong>MODE REMAINING:</strong> ${currentProgress.remaining}</div>
+      <div><strong>MYSTERIES UNLOCKED:</strong> ${mysteryCount}</div>
+      <div><strong>COMPLETED PROMPTS TRACKED:</strong> ${completedCount}</div>
+      <div><strong>TOTAL FIRST COMPLETIONS:</strong> ${Number(
+        state.pinStats?.totalFirstCompletions || 0
+      )}</div>
+    </div>
+  `;
 
   const mysteryBlock = mysteryCount
     ? `
@@ -1139,16 +1501,27 @@ function renderHomeLog() {
     mysteryBlock +
     pins
       .slice(0, 50)
-      .map(
-        (pin) => `
-        <div style="padding:10px;border:1px solid #333;border-radius:12px;margin:8px 0;background:#111;">
-          <div style="font-weight:bold;">${pin.n}</div>
+      .map((pin) => {
+        const progress = getPinProgress(pin);
+        const done = !!progress;
+        return `
+        <div style="padding:10px;border:1px solid #333;border-radius:12px;margin:8px 0;background:${
+          done ? "rgba(77,255,158,0.08)" : "#111"
+        };">
+          <div style="font-weight:bold;">${done ? "✅ " : ""}${pin.n}</div>
           <div style="opacity:.85;font-size:12px;">${
             pin.zone || pin.set || pin.category || "unknown"
           }</div>
+          <div style="margin-top:6px;font-size:12px;opacity:.82;">
+            ${
+              done
+                ? `Completed ${Number(progress.completionCount || 1)} time(s)`
+                : "Not completed yet"
+            }
+          </div>
         </div>
-      `
-      )
+      `;
+      })
       .join("");
 }
 
@@ -1287,6 +1660,7 @@ function wireButtons() {
   );
 
   $("btn-commander")?.addEventListener("click", () => {
+    renderHomeLog();
     showModal("commander-hub");
     speakText("Commander hub opened.");
   });
@@ -1392,12 +1766,8 @@ function wireButtons() {
   document.querySelectorAll(".m-tile").forEach((tile) => {
     tile.addEventListener("click", () => {
       const mode = tile.dataset.mode;
-      if (!mode) return;
+      if (!mode || mode === "battle") return;
       closeModal("quest-modal");
-      if (mode === "health") {
-        openTask("activity");
-        return;
-      }
       openTask(mode);
     });
   });
