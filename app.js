@@ -1,5 +1,11 @@
+import {
+  getQA,
+  getPinStartIntro,
+  getDefaultAdaptiveProfile,
+  normaliseAdaptiveProfile,
+  updateAdaptiveProfile,
+} from "./qa.js";
 import { PINS } from "./pins.js";
-import { getQA, getPinStartIntro } from "./qa.js";
 import { ADULT_PINS } from "./adult_pins.js";
 import { ADULT_CONTENT } from "./adult_content.js";
 import { applyReward } from "./progression.js";
@@ -23,6 +29,12 @@ const DEFAULT_STATE = {
   tierMode: "kid",
   unlockedMysteries: [],
   completedQuestionIds: [],
+  recentQuestionTags: [],
+  quizProfiles: {
+    kid: getDefaultAdaptiveProfile("kid"),
+    teen: getDefaultAdaptiveProfile("teen"),
+    adult: getDefaultAdaptiveProfile("adult"),
+  },
   purchasedItems: [],
   inventory: {},
   completedPins: {},
@@ -212,6 +224,24 @@ function loadState() {
       completedQuestionIds: Array.isArray(parsed.completedQuestionIds)
         ? parsed.completedQuestionIds
         : [],
+      recentQuestionTags: Array.isArray(parsed.recentQuestionTags)
+        ? parsed.recentQuestionTags
+        : [],
+      quizProfiles:
+        parsed.quizProfiles && typeof parsed.quizProfiles === "object"
+          ? {
+              kid: normaliseAdaptiveProfile(parsed.quizProfiles.kid || {}, "kid"),
+              teen: normaliseAdaptiveProfile(parsed.quizProfiles.teen || {}, "teen"),
+              adult: normaliseAdaptiveProfile(
+                parsed.quizProfiles.adult || {},
+                "adult"
+              ),
+            }
+          : {
+              kid: getDefaultAdaptiveProfile("kid"),
+              teen: getDefaultAdaptiveProfile("teen"),
+              adult: getDefaultAdaptiveProfile("adult"),
+            },
       purchasedItems: Array.isArray(parsed.purchasedItems)
         ? parsed.purchasedItems
         : [],
@@ -474,6 +504,18 @@ function getEffectiveTier() {
     return getEnabledPlayers().length <= 1 ? "adult" : "teen";
   }
   return state.tierMode || "kid";
+}
+
+function getCurrentQuizProfile() {
+  const tier = getEffectiveTier();
+  const base = state.quizProfiles?.[tier] || getDefaultAdaptiveProfile(tier);
+  return normaliseAdaptiveProfile(base, tier);
+}
+
+function rememberQuestionTags(tags = []) {
+  if (!Array.isArray(tags) || !tags.length) return;
+  const merged = [...(state.recentQuestionTags || []), ...tags.map(String)];
+  state.recentQuestionTags = merged.slice(-20);
 }
 
 function getCurrentPins() {
@@ -1109,6 +1151,8 @@ function openTask(mode) {
       zone: currentPin.zone || currentPin.set || state.mapMode,
       salt: Date.now(),
       recentQuestionIds: state.completedQuestionIds || [],
+      recentQuestionTags: state.recentQuestionTags || [],
+      adaptiveProfile: getCurrentQuizProfile(),
     });
   }
 
@@ -1253,9 +1297,7 @@ function renderShop() {
     </div>
   `;
 
-  const ownedItems = SHOP_ITEMS.filter(
-    (item) => getInventoryCount(item.id) > 0
-  );
+  const ownedItems = SHOP_ITEMS.filter((item) => getInventoryCount(item.id) > 0);
 
   inventory.innerHTML = ownedItems.length
     ? ownedItems
@@ -1279,16 +1321,12 @@ function renderShop() {
         <div class="shop-item-top">
           <div>
             <div style="font-weight:bold;">${item.name}</div>
-            <div style="font-size:12px;opacity:.85;margin-top:6px;">${
-              item.desc
-            }</div>
+            <div style="font-size:12px;opacity:.85;margin-top:6px;">${item.desc}</div>
           </div>
           <div class="shop-cost">${item.cost} 🪙</div>
         </div>
         ${owned > 0 ? `<div class="owned-tag">OWNED: ${owned}</div>` : ""}
-        <button class="win-btn shop-buy-btn" data-shop-id="${
-          item.id
-        }" style="margin-top:12px;">
+        <button class="win-btn shop-buy-btn" data-shop-id="${item.id}" style="margin-top:12px;">
           BUY
         </button>
       </div>
@@ -1361,6 +1399,24 @@ function answerMission(index) {
     feedback.style.color = "#ff6b6b";
     feedback.innerText = `Wrong answer.\nCorrect answer: ${correctAnswer}`;
     speakText(`Wrong answer. The correct answer is ${correctAnswer}.`);
+
+    if (currentTask.mode === "quiz") {
+      const tier = getEffectiveTier();
+      const currentProfile =
+        state.quizProfiles?.[tier] || getDefaultAdaptiveProfile(tier);
+
+      state.quizProfiles[tier] = updateAdaptiveProfile(currentProfile, {
+        tier,
+        isCorrect: false,
+        difficulty: q?.meta?.difficulty,
+        tags: q?.meta?.tags || [],
+        questionId: q?.meta?.questionId || q?.id || null,
+      });
+
+      rememberQuestionTags(q?.meta?.tags || []);
+      saveState();
+    }
+
     return;
   }
 
@@ -1383,6 +1439,21 @@ function answerMission(index) {
 
   const questionId = q?.meta?.questionId || q?.id || null;
   rememberQuestion(questionId);
+  rememberQuestionTags(q?.meta?.tags || []);
+
+  if (currentTask.mode === "quiz") {
+    const tier = getEffectiveTier();
+    const currentProfile =
+      state.quizProfiles?.[tier] || getDefaultAdaptiveProfile(tier);
+
+    state.quizProfiles[tier] = updateAdaptiveProfile(currentProfile, {
+      tier,
+      isCorrect: true,
+      difficulty: q?.meta?.difficulty,
+      tags: q?.meta?.tags || [],
+      questionId,
+    });
+  }
 
   const completion = recordPinCompletion(
     currentTask.pin,
@@ -1460,6 +1531,8 @@ function renderHomeLog() {
   const xp = Number(state.meta?.xp || 0);
   const level = getLevelFromXP(xp);
   const levelProgress = getLevelProgress(xp);
+  const tier = getEffectiveTier();
+  const quizProfile = getCurrentQuizProfile();
 
   summary.innerHTML = `
     <div style="padding:12px;border:1px solid #444;border-radius:14px;background:#111;line-height:1.6;">
@@ -1467,11 +1540,14 @@ function renderHomeLog() {
       <div><strong>XP:</strong> ${xp} (${levelProgress}/100 to next level)</div>
       <div><strong>PACK:</strong> ${state.activePack}</div>
       <div><strong>MODE:</strong> ${state.mapMode}</div>
-      <div><strong>TIER:</strong> ${getEffectiveTier()}</div>
+      <div><strong>TIER:</strong> ${tier}</div>
+      <div><strong>QUIZ RATING:</strong> ${Number(quizProfile.rating || 0)}</div>
+      <div><strong>QUIZ STREAK:</strong> ${Number(quizProfile.streak || 0)}</div>
+      <div><strong>QUIZ CONFIDENCE:</strong> ${Math.round(
+        Number(quizProfile.confidence || 0) * 100
+      )}%</div>
       <div><strong>PINS LOADED:</strong> ${pins.length}</div>
-      <div><strong>MODE COMPLETED:</strong> ${currentProgress.completed}/${
-    currentProgress.total
-  } (${currentProgress.percent}%)</div>
+      <div><strong>MODE COMPLETED:</strong> ${currentProgress.completed}/${currentProgress.total} (${currentProgress.percent}%)</div>
       <div><strong>MODE REMAINING:</strong> ${currentProgress.remaining}</div>
       <div><strong>MYSTERIES UNLOCKED:</strong> ${mysteryCount}</div>
       <div><strong>COMPLETED PROMPTS TRACKED:</strong> ${completedCount}</div>
