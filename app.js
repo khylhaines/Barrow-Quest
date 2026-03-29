@@ -13,7 +13,7 @@ import { getRandomMystery } from "./mysteries.js";
 
 const $ = (id) => document.getElementById(id);
 
-const SAVE_KEY = "bq_world_v15";
+const SAVE_KEY = "bq_world_v16";
 
 const BADGE_MILESTONES = [
   { captures: 1, name: "Scout", icon: "🧭" },
@@ -65,6 +65,7 @@ const DEFAULT_STATE = {
   },
   purchasedItems: [],
   inventory: {},
+  captainNotes: [],
   completedPins: {},
   pinStats: {
     totalCompleted: 0,
@@ -260,10 +261,7 @@ function loadState() {
         parsed.quizProfiles && typeof parsed.quizProfiles === "object"
           ? {
               kid: normaliseAdaptiveProfile(parsed.quizProfiles.kid || {}, "kid"),
-              teen: normaliseAdaptiveProfile(
-                parsed.quizProfiles.teen || {},
-                "teen"
-              ),
+              teen: normaliseAdaptiveProfile(parsed.quizProfiles.teen || {}, "teen"),
               adult: normaliseAdaptiveProfile(
                 parsed.quizProfiles.adult || {},
                 "adult"
@@ -281,6 +279,9 @@ function loadState() {
         parsed.inventory && typeof parsed.inventory === "object"
           ? parsed.inventory
           : {},
+      captainNotes: Array.isArray(parsed.captainNotes)
+        ? parsed.captainNotes
+        : [],
       completedPins:
         parsed.completedPins && typeof parsed.completedPins === "object"
           ? parsed.completedPins
@@ -396,6 +397,133 @@ function showRewardImage(pin, fallbackText = "") {
 
 function closeRewardImageModal() {
   closeModal("reward-image-modal");
+}
+
+/* ============================
+   CAPTAIN NOTES / BROADCAST
+============================ */
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function renderCaptainNotes() {
+  const list = $("captain-notes-list");
+  if (!list) return;
+
+  const notes = Array.isArray(state.captainNotes) ? state.captainNotes : [];
+
+  if (!notes.length) {
+    list.innerHTML = `
+      <div style="
+        border:1px solid rgba(255,255,255,0.08);
+        border-radius:14px;
+        padding:12px;
+        background:#111;
+        color:var(--muted);
+      ">
+        No captain notes saved yet.
+      </div>
+    `;
+    return;
+  }
+
+  list.innerHTML = notes
+    .map(
+      (note, index) => `
+        <div style="
+          border:1px solid rgba(255,255,255,0.08);
+          border-radius:14px;
+          padding:12px;
+          background:#111;
+        ">
+          <div style="font-size:12px;color:var(--gold);margin-bottom:6px;">
+            NOTE ${notes.length - index}
+          </div>
+          <div style="white-space:pre-wrap;line-height:1.45;">${escapeHtml(
+            note.text
+          )}</div>
+          <div style="margin-top:10px;">
+            <button
+              class="win-btn captain-note-delete-btn"
+              data-note-id="${note.id}"
+              style="background:#2a2a2a;color:#fff;"
+            >
+              DELETE
+            </button>
+          </div>
+        </div>
+      `
+    )
+    .join("");
+
+  document.querySelectorAll(".captain-note-delete-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      deleteCaptainNote(btn.dataset.noteId);
+    });
+  });
+}
+
+function saveCaptainNote(text) {
+  const clean = String(text || "").trim();
+  if (!clean) return false;
+
+  if (!Array.isArray(state.captainNotes)) {
+    state.captainNotes = [];
+  }
+
+  state.captainNotes.unshift({
+    id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    text: clean,
+    createdAt: new Date().toISOString(),
+  });
+
+  state.captainNotes = state.captainNotes.slice(0, 50);
+  saveState();
+  renderCaptainNotes();
+  return true;
+}
+
+function deleteCaptainNote(noteId) {
+  if (!noteId || !Array.isArray(state.captainNotes)) return;
+  state.captainNotes = state.captainNotes.filter((n) => n.id !== noteId);
+  saveState();
+  renderCaptainNotes();
+}
+
+function sendBroadcastMessage() {
+  const input = $("broadcast-input");
+  if (!input) return;
+
+  const text = String(input.value || "").trim();
+  if (!text) {
+    alert("Type a message first.");
+    return;
+  }
+
+  speakText(text);
+  input.value = "";
+}
+
+function handleSaveCaptainNote() {
+  const input = $("captain-note-input");
+  if (!input) return;
+
+  const text = String(input.value || "").trim();
+  if (!text) {
+    alert("Write a note first.");
+    return;
+  }
+
+  const ok = saveCaptainNote(text);
+  if (!ok) return;
+
+  speakText("Captain note saved.");
+  input.value = "";
 }
 
 /* ============================
@@ -827,15 +955,7 @@ function getClassicModePoolForPin(pin) {
   const worldPools = {
     core: ["quiz", "history", "logic", "activity", "family", "speed"],
     park: ["quiz", "history", "activity", "family", "speed", "logic"],
-    abbey: [
-      "history",
-      "quiz",
-      "logic",
-      "activity",
-      "ghost",
-      "family",
-      "speed",
-    ],
+    abbey: ["history", "quiz", "logic", "activity", "ghost", "family", "speed"],
   };
 
   pushUnique(primary);
@@ -1913,6 +2033,7 @@ function wireButtons() {
 
   $("btn-commander")?.addEventListener("click", () => {
     renderHomeLog();
+    renderCaptainNotes();
     showModal("commander-hub");
     speakText("Commander hub opened.");
   });
@@ -1923,6 +2044,9 @@ function wireButtons() {
   $("btn-close-commander-x")?.addEventListener("click", () =>
     closeModal("commander-hub")
   );
+
+  $("btn-send-broadcast")?.addEventListener("click", sendBroadcastMessage);
+  $("btn-save-captain-note")?.addEventListener("click", handleSaveCaptainNote);
 
   $("btn-close-quest")?.addEventListener("click", () =>
     closeModal("quest-modal")
@@ -2156,6 +2280,7 @@ function boot() {
     showQuestLayoutForPack();
     renderHomeLog();
     renderShop();
+    renderCaptainNotes();
     wireButtons();
 
     loadVoices();
