@@ -1422,7 +1422,7 @@ export const PINS = [
 
   {
     id: "park_start_parkave",
-    n: "Park Road Gate",
+    n: "Park Ave Gate",
     zone: "park",
     set: "park",
     route: "park",
