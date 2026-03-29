@@ -13,7 +13,16 @@ import { getRandomMystery } from "./mysteries.js";
 
 const $ = (id) => document.getElementById(id);
 
-const SAVE_KEY = "bq_world_v11";
+const SAVE_KEY = "bq_world_v13";
+
+const BADGE_MILESTONES = [
+  { captures: 1, name: "Scout", icon: "🧭" },
+  { captures: 5, name: "Explorer", icon: "🥾" },
+  { captures: 10, name: "Tracker", icon: "🗺️" },
+  { captures: 20, name: "Pathfinder", icon: "🧱" },
+  { captures: 50, name: "Adventurer", icon: "⚔️" },
+  { captures: 100, name: "Legend", icon: "👑" },
+];
 
 const DEFAULT_STATE = {
   players: [
@@ -46,6 +55,7 @@ const DEFAULT_STATE = {
   meta: {
     xp: 0,
     tokens: 0,
+    badges: [],
   },
   settings: {
     radius: 35,
@@ -260,6 +270,7 @@ function loadState() {
       meta: {
         ...structuredClone(DEFAULT_STATE.meta),
         ...(parsed.meta || {}),
+        badges: Array.isArray(parsed?.meta?.badges) ? parsed.meta.badges : [],
       },
     };
   } catch {
@@ -272,7 +283,7 @@ function saveState() {
 }
 
 /* ============================
-   PROGRESSION / COMPLETION
+   BADGES / LEVELS
 ============================ */
 function getLevelFromXP(xp) {
   const safeXp = Math.max(0, Number(xp || 0));
@@ -284,6 +295,62 @@ function getLevelProgress(xp) {
   return safeXp % 100;
 }
 
+function hasBadge(name) {
+  return Array.isArray(state.meta?.badges)
+    ? state.meta.badges.some((b) => b.name === name)
+    : false;
+}
+
+function showBadgePopup(badge) {
+  const popup = $("badge-popup");
+  const icon = $("badge-icon");
+  const title = $("badge-title");
+  const text = $("badge-text");
+
+  if (!popup || !icon || !title || !text) return;
+
+  icon.innerText = badge.icon;
+  title.innerText = "BADGE UNLOCKED";
+  text.innerText = `${badge.name} • ${badge.captures} node${
+    badge.captures === 1 ? "" : "s"
+  }`;
+
+  popup.classList.remove("hidden");
+  speakText(`Badge unlocked. ${badge.name}.`);
+
+  setTimeout(() => {
+    popup.classList.add("hidden");
+  }, 3200);
+}
+
+function awardBadge(badge) {
+  if (!badge || hasBadge(badge.name)) return false;
+
+  state.meta.badges.push({
+    ...badge,
+    awardedAt: new Date().toISOString(),
+  });
+
+  showBadgePopup(badge);
+  return true;
+}
+
+function checkBadgeUnlocksByCaptures() {
+  const captures = Number(state.pinStats?.totalFirstCompletions || 0);
+  let unlockedAny = false;
+
+  BADGE_MILESTONES.forEach((badge) => {
+    if (captures >= badge.captures && !hasBadge(badge.name)) {
+      if (awardBadge(badge)) unlockedAny = true;
+    }
+  });
+
+  if (unlockedAny) saveState();
+}
+
+/* ============================
+   PROGRESSION / COMPLETION
+============================ */
 function getPinProgressKey(pin) {
   if (!pin?.id) return null;
   const pack = state.activePack || "classic";
@@ -433,36 +500,18 @@ function updateCoins(playerId, amount) {
 }
 
 function renderHUD() {
-  const enabled = getEnabledPlayers();
-  const p1 = enabled[0] || { name: "Player 1", coins: 0, id: null };
-  const p2 = enabled[1] || { name: "Player 2", coins: 0, id: null };
-  const p3 = enabled[2] || { name: "Player 3", coins: 0, id: null };
-
-  if ($("h-k")) $("h-k").innerText = `${p1.name}: ${p1.coins} 🪙`;
-  if ($("h-p")) $("h-p").innerText = `${p2.name}: ${p2.coins} 🪙`;
-  if ($("h-me")) $("h-me").innerText = `${p3.name}: ${p3.coins} 🪙`;
-
   const active = getActivePlayer();
-
-  if ($("hp-k-tag")) {
-    $("hp-k-tag").innerText = active?.id === p1.id ? "ACTIVE" : "OFF";
-    $("hp-k-tag").className =
-      active?.id === p1.id ? "hp-status hp-on" : "hp-status hp-off";
-  }
-
-  if ($("hp-p-tag")) {
-    $("hp-p-tag").innerText = active?.id === p2.id ? "ACTIVE" : "OFF";
-    $("hp-p-tag").className =
-      active?.id === p2.id ? "hp-status hp-on" : "hp-status hp-off";
-  }
-
   const coins = active?.coins || 0;
   const xp = Number(state.meta?.xp || 0);
-  const tokens = Number(state.meta?.tokens || 0);
+  const level = getLevelFromXP(xp);
 
   if ($("top-coins")) $("top-coins").innerText = String(coins);
-  if ($("top-xp")) $("top-xp").innerText = `L${getLevelFromXP(xp)} • ${xp}`;
-  if ($("top-tokens")) $("top-tokens").innerText = String(tokens);
+  if ($("top-xp")) $("top-xp").innerText = `L${level} • ${xp}`;
+
+  const legacyTokens = $("top-tokens");
+  if (legacyTokens) {
+    legacyTokens.parentElement?.classList.add("hidden");
+  }
 }
 
 /* ============================
@@ -913,8 +962,9 @@ function showActionButton(show) {
 }
 
 function updateCaptureText(text) {
-  if ($("capture-hud")) {
-    $("capture-hud").innerText = text || "WAITING FOR GPS...";
+  const actionBtn = $("action-trigger");
+  if (actionBtn && text) {
+    actionBtn.title = text;
   }
 }
 
@@ -937,10 +987,7 @@ function distanceInMeters(aLat, aLng, bLat, bLng) {
 }
 
 function startLocationWatch() {
-  if (!navigator.geolocation || !map) {
-    updateCaptureText("GPS NOT AVAILABLE");
-    return;
-  }
+  if (!navigator.geolocation || !map) return;
 
   locationWatchId = navigator.geolocation.watchPosition(
     (pos) => {
@@ -971,28 +1018,10 @@ function startLocationWatch() {
         );
         showActionButton(true);
       } else {
-        if (state.activePack === "adult") {
-          const label = state.activeAdultCategory
-            ? `ADULT: ${String(state.activeAdultCategory)
-                .replaceAll("_", " ")
-                .toUpperCase()}`
-            : "ADULT MAP";
-          updateCaptureText(label);
-        } else {
-          updateCaptureText(
-            state.mapMode === "core"
-              ? "FULL BARROW MAP"
-              : state.mapMode === "park"
-              ? "PARK ADVENTURE"
-              : "ABBEY QUEST"
-          );
-        }
         showActionButton(false);
       }
     },
-    () => {
-      updateCaptureText("GPS ERROR");
-    },
+    () => {},
     {
       enableHighAccuracy: true,
       maximumAge: 5000,
@@ -1059,10 +1088,6 @@ function openMissionMenu() {
       `${currentPin.n}. Mission briefing ready.`;
 
     renderClassicModeChoices(currentPin);
-  }
-
-  if ($("q-story")) {
-    $("q-story").innerText = storyText;
   }
 
   speakText(storyText);
@@ -1283,9 +1308,9 @@ function renderShop() {
 
   const coins = active?.coins || 0;
   const xp = Number(state.meta?.xp || 0);
-  const tokens = Number(state.meta?.tokens || 0);
   const level = getLevelFromXP(xp);
   const levelProgress = getLevelProgress(xp);
+  const badges = Array.isArray(state.meta?.badges) ? state.meta.badges : [];
 
   summary.innerHTML = `
     <div style="padding:10px;border:1px solid #333;border-radius:12px;background:#111;">
@@ -1293,16 +1318,36 @@ function renderShop() {
       Coins: ${coins} 🪙<br>
       XP: ${xp} (Level ${level})<br>
       Level Progress: ${levelProgress}/100<br>
-      Tokens: ${tokens}
+      Badges: ${badges.length}
     </div>
   `;
 
   const ownedItems = SHOP_ITEMS.filter((item) => getInventoryCount(item.id) > 0);
 
-  inventory.innerHTML = ownedItems.length
-    ? ownedItems
-        .map(
-          (item) => `
+  const badgeBlock = badges.length
+    ? `
+      <div style="margin-top:10px;">
+        ${badges
+          .map(
+            (badge) => `
+          <div style="border:1px solid #333;border-radius:14px;padding:12px;background:#111;margin-bottom:10px;">
+            <div style="font-weight:bold;">${badge.icon} ${badge.name}</div>
+            <div style="font-size:12px;opacity:.82;margin-top:6px;">${badge.captures} node${
+              badge.captures === 1 ? "" : "s"
+            }</div>
+          </div>
+        `
+          )
+          .join("")}
+      </div>
+    `
+    : "";
+
+  inventory.innerHTML =
+    (ownedItems.length
+      ? ownedItems
+          .map(
+            (item) => `
         <div style="border:1px solid #333;border-radius:14px;padding:12px;background:#111;margin-bottom:10px;">
           <div style="font-weight:bold;">${item.name}</div>
           <div style="font-size:12px;opacity:.82;margin-top:6px;">Owned: ${getInventoryCount(
@@ -1310,9 +1355,9 @@ function renderShop() {
           )}</div>
         </div>
       `
-        )
-        .join("")
-    : `<div style="opacity:.8;">No purchases yet.</div>`;
+          )
+          .join("")
+      : `<div style="opacity:.8;">No purchases yet.</div>`) + badgeBlock;
 
   list.innerHTML = SHOP_ITEMS.map((item) => {
     const owned = getInventoryCount(item.id);
@@ -1428,14 +1473,15 @@ function answerMission(index) {
 
   const rewardCoins = Number(rewardResult.coins || 0);
   const rewardXp = Number(rewardResult.xp || 0);
-  const rewardTokens = Number(rewardResult.tokens || 0);
 
   if (active && rewardCoins) {
     updateCoins(active.id, rewardCoins);
   }
 
+  const oldLevel = getLevelFromXP(Number(state.meta.xp || 0));
   state.meta.xp = Number(state.meta.xp || 0) + rewardXp;
-  state.meta.tokens = Number(state.meta.tokens || 0) + rewardTokens;
+  state.meta.tokens = Number(state.meta.tokens || 0) + Number(rewardResult.tokens || 0);
+  const newLevel = getLevelFromXP(Number(state.meta.xp || 0));
 
   const questionId = q?.meta?.questionId || q?.id || null;
   rememberQuestion(questionId);
@@ -1464,6 +1510,8 @@ function answerMission(index) {
 
   const mystery = maybeUnlockMystery();
 
+  checkBadgeUnlocksByCaptures();
+
   saveState();
   renderHUD();
   renderShop();
@@ -1475,7 +1523,7 @@ function answerMission(index) {
   const firstLabel = completion.firstTime
     ? "NEW LOCATION COMPLETE"
     : "REPLAY COMPLETE";
-  const rewardLine = `+${rewardCoins} coins +${rewardXp} XP +${rewardTokens} tokens`;
+  const rewardLine = `+${rewardCoins} coins +${rewardXp} XP`;
 
   if (mystery) {
     feedback.innerText =
@@ -1492,11 +1540,17 @@ function answerMission(index) {
     feedback.innerText =
       `${firstLabel}\n${rewardLine}\n\n` + `${q.fact || "Mission complete."}`;
 
-    speakText(
-      `${firstLabel}. ${rewardCoins} coins awarded. ${rewardXp} experience. ${
-        q.fact || "Mission complete."
-      }`
-    );
+    if (newLevel > oldLevel) {
+      speakText(
+        `Level up. You reached level ${newLevel}. ${q.fact || "Mission complete."}`
+      );
+    } else {
+      speakText(
+        `${firstLabel}. ${rewardCoins} coins awarded. ${rewardXp} experience. ${
+          q.fact || "Mission complete."
+        }`
+      );
+    }
   }
 }
 
@@ -1533,11 +1587,16 @@ function renderHomeLog() {
   const levelProgress = getLevelProgress(xp);
   const tier = getEffectiveTier();
   const quizProfile = getCurrentQuizProfile();
+  const badges = Array.isArray(state.meta?.badges) ? state.meta.badges : [];
 
   summary.innerHTML = `
     <div style="padding:12px;border:1px solid #444;border-radius:14px;background:#111;line-height:1.6;">
       <div><strong>LEVEL:</strong> ${level}</div>
       <div><strong>XP:</strong> ${xp} (${levelProgress}/100 to next level)</div>
+      <div><strong>BADGES:</strong> ${badges.length}</div>
+      <div><strong>NODES CAPTURED:</strong> ${Number(
+        state.pinStats?.totalFirstCompletions || 0
+      )}</div>
       <div><strong>PACK:</strong> ${state.activePack}</div>
       <div><strong>MODE:</strong> ${state.mapMode}</div>
       <div><strong>TIER:</strong> ${tier}</div>
@@ -1573,8 +1632,22 @@ function renderHomeLog() {
       </div>
     `;
 
+  const badgeBlock = badges.length
+    ? `
+      <div style="padding:10px;border:1px solid #444;border-radius:12px;margin:8px 0 14px;background:#161616;">
+        <div style="font-weight:bold;color:var(--gold);">NODE BADGES</div>
+        <div style="margin-top:8px;font-size:13px;line-height:1.6;">
+          ${badges
+            .map((b) => `${b.icon} ${b.name} (${b.captures} node${b.captures === 1 ? "" : "s"})`)
+            .join("<br>")}
+        </div>
+      </div>
+    `
+    : "";
+
   list.innerHTML =
     mysteryBlock +
+    badgeBlock +
     pins
       .slice(0, 50)
       .map((pin) => {
@@ -1982,6 +2055,7 @@ function boot() {
     }
 
     initMap();
+    checkBadgeUnlocksByCaptures();
     console.log("App loaded");
   } catch (err) {
     console.error("BOOT ERROR:", err);
