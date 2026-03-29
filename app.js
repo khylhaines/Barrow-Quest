@@ -13,7 +13,7 @@ import { getRandomMystery } from "./mysteries.js";
 
 const $ = (id) => document.getElementById(id);
 
-const SAVE_KEY = "bq_world_v16";
+const SAVE_KEY = "bq_world_v17";
 
 const BADGE_MILESTONES = [
   { captures: 1, name: "Scout", icon: "🧭" },
@@ -527,8 +527,19 @@ function handleSaveCaptainNote() {
 }
 
 /* ============================
-   PROGRESSION / COMPLETION
+   NODE CAPTURE SYSTEM
 ============================ */
+function getCaptureRequired(pin) {
+  const value = Number(pin?.captureRequired || 4);
+  return Math.max(1, Math.min(6, value));
+}
+
+function getMustIncludeModes(pin) {
+  return Array.isArray(pin?.mustInclude)
+    ? pin.mustInclude.map((x) => String(x).toLowerCase())
+    : [];
+}
+
 function getPinProgressKey(pin) {
   if (!pin?.id) return null;
   const pack = state.activePack || "classic";
@@ -537,65 +548,186 @@ function getPinProgressKey(pin) {
   return `${pack}__${mode}__${adult}__${pin.id}`;
 }
 
+function createEmptyPinProgress(pin) {
+  return {
+    pinId: pin.id,
+    pinName: pin.n || pin.id,
+    pack: state.activePack,
+    mapMode: state.mapMode,
+    adultCategory: state.activeAdultCategory,
+    firstCompletedAt: null,
+    lastCompletedAt: null,
+    missionPlayCount: 0,
+    captureCount: 0,
+    captureRequired: getCaptureRequired(pin),
+    mustInclude: getMustIncludeModes(pin),
+    completedModes: [],
+    fullyCaptured: false,
+    lastQuestionId: null,
+    lastReward: {
+      coins: 0,
+      xp: 0,
+      tokens: 0,
+    },
+  };
+}
+
 function getPinProgress(pin) {
   const key = getPinProgressKey(pin);
   if (!key) return null;
-  return state.completedPins[key] || null;
+
+  const existing = state.completedPins[key];
+  if (!existing) return null;
+
+  return {
+    ...createEmptyPinProgress(pin),
+    ...existing,
+    completedModes: Array.isArray(existing.completedModes)
+      ? existing.completedModes
+      : [],
+    mustInclude: Array.isArray(existing.mustInclude)
+      ? existing.mustInclude
+      : getMustIncludeModes(pin),
+  };
+}
+
+function getCompletedModesForPin(pin) {
+  return getPinProgress(pin)?.completedModes || [];
+}
+
+function isModeCompletedForPin(pin, mode) {
+  const completed = getCompletedModesForPin(pin);
+  return completed.includes(String(mode || "").toLowerCase());
+}
+
+function getCaptureStatus(pin) {
+  const progress = getPinProgress(pin) || createEmptyPinProgress(pin);
+  const completedModes = Array.isArray(progress.completedModes)
+    ? progress.completedModes
+    : [];
+  const required = Number(progress.captureRequired || getCaptureRequired(pin));
+  const mustInclude = Array.isArray(progress.mustInclude)
+    ? progress.mustInclude
+    : getMustIncludeModes(pin);
+
+  const missingRequired = mustInclude.filter(
+    (mode) => !completedModes.includes(mode)
+  );
+  const completedCount = completedModes.length;
+  const fullyCaptured = completedCount >= required && missingRequired.length === 0;
+
+  return {
+    completedCount,
+    required,
+    mustInclude,
+    missingRequired,
+    fullyCaptured,
+    completedModes,
+    progress,
+  };
 }
 
 function isPinCompleted(pin) {
-  return !!getPinProgress(pin);
+  return getCaptureStatus(pin).fullyCaptured;
 }
 
-function recordPinCompletion(pin, mode, rewardResult, questionId) {
-  const key = getPinProgressKey(pin);
-  if (!key) return { firstTime: false };
+function getMissionReward({ mode, isNewMode }) {
+  const base = applyReward({
+    mode,
+    correct: true,
+  }) || { coins: 20, xp: 8, tokens: 0 };
 
-  const existing = state.completedPins[key];
-  const now = new Date().toISOString();
-
-  if (!existing) {
-    state.completedPins[key] = {
-      pinId: pin.id,
-      pinName: pin.n || pin.id,
-      pack: state.activePack,
-      mapMode: state.mapMode,
-      adultCategory: state.activeAdultCategory,
-      firstCompletedAt: now,
-      lastCompletedAt: now,
-      completionCount: 1,
-      completedModes: mode ? [mode] : [],
-      lastQuestionId: questionId || null,
-      lastReward: {
-        coins: Number(rewardResult?.coins || 0),
-        xp: Number(rewardResult?.xp || 0),
-        tokens: Number(rewardResult?.tokens || 0),
-      },
+  if (isNewMode) {
+    return {
+      coins: Math.max(6, Math.floor(Number(base.coins || 0) * 0.55)),
+      xp: Math.max(4, Math.floor(Number(base.xp || 0) * 0.55)),
+      tokens: 0,
     };
-
-    state.pinStats.totalCompleted += 1;
-    state.pinStats.totalFirstCompletions += 1;
-
-    return { firstTime: true, record: state.completedPins[key] };
   }
 
+  return {
+    coins: Math.max(2, Math.floor(Number(base.coins || 0) * 0.2)),
+    xp: Math.max(1, Math.floor(Number(base.xp || 0) * 0.2)),
+    tokens: 0,
+  };
+}
+
+function getFullCaptureBonus(pin) {
+  const required = getCaptureRequired(pin);
+  return {
+    coins: 15 + required * 3,
+    xp: 10 + required * 2,
+    tokens: 1,
+  };
+}
+
+function recordMissionCompletion(pin, mode, rewardResult, questionId) {
+  const key = getPinProgressKey(pin);
+  if (!key) {
+    return {
+      firstModeTime: false,
+      fullCaptureJustUnlocked: false,
+      record: null,
+      status: null,
+    };
+  }
+
+  const now = new Date().toISOString();
+  const existing = getPinProgress(pin) || createEmptyPinProgress(pin);
+  const safeMode = String(mode || "").toLowerCase();
+  const beforeStatus = getCaptureStatus(pin);
+  const alreadyHadMode = existing.completedModes.includes(safeMode);
+
+  existing.missionPlayCount = Number(existing.missionPlayCount || 0) + 1;
   existing.lastCompletedAt = now;
-  existing.completionCount = Number(existing.completionCount || 0) + 1;
   existing.lastQuestionId = questionId || existing.lastQuestionId || null;
+  existing.captureRequired = getCaptureRequired(pin);
+  existing.mustInclude = getMustIncludeModes(pin);
+
+  if (!alreadyHadMode && safeMode) {
+    existing.completedModes.push(safeMode);
+    existing.captureCount = existing.completedModes.length;
+  }
+
+  const afterMissingRequired = existing.mustInclude.filter(
+    (x) => !existing.completedModes.includes(x)
+  );
+  const afterFullyCaptured =
+    existing.completedModes.length >= existing.captureRequired &&
+    afterMissingRequired.length === 0;
+
+  const fullCaptureJustUnlocked = !beforeStatus.fullyCaptured && afterFullyCaptured;
+
+  if (fullCaptureJustUnlocked) {
+    existing.fullyCaptured = true;
+    existing.firstCompletedAt = existing.firstCompletedAt || now;
+    state.pinStats.totalCompleted += 1;
+    state.pinStats.totalFirstCompletions += 1;
+  } else if (alreadyHadMode) {
+    state.pinStats.totalRepeatCompletions += 1;
+  }
+
   existing.lastReward = {
     coins: Number(rewardResult?.coins || 0),
     xp: Number(rewardResult?.xp || 0),
     tokens: Number(rewardResult?.tokens || 0),
   };
 
-  if (mode && !Array.isArray(existing.completedModes)) {
-    existing.completedModes = [mode];
-  } else if (mode && !existing.completedModes.includes(mode)) {
-    existing.completedModes.push(mode);
-  }
+  state.completedPins[key] = existing;
 
-  state.pinStats.totalRepeatCompletions += 1;
-  return { firstTime: false, record: existing };
+  return {
+    firstModeTime: !alreadyHadMode,
+    fullCaptureJustUnlocked,
+    record: existing,
+    status: {
+      completedCount: existing.completedModes.length,
+      required: existing.captureRequired,
+      mustInclude: existing.mustInclude,
+      missingRequired: afterMissingRequired,
+      fullyCaptured: afterFullyCaptured,
+      completedModes: existing.completedModes,
+    },
+  };
 }
 
 function getCurrentModeProgress() {
@@ -605,31 +737,6 @@ function getCurrentModeProgress() {
   const remaining = Math.max(0, total - completed);
   const percent = total ? Math.round((completed / total) * 100) : 0;
   return { total, completed, remaining, percent };
-}
-
-function getRewardForMission({ mode, correct }) {
-  const base = applyReward({
-    mode,
-    correct,
-  }) || { coins: 25, xp: 10, tokens: 0 };
-
-  const firstTime = currentPin ? !isPinCompleted(currentPin) : false;
-
-  if (firstTime) {
-    return {
-      coins: Number(base.coins || 0),
-      xp: Number(base.xp || 0) + 10,
-      tokens: Number(base.tokens || 0) + 1,
-      firstTime: true,
-    };
-  }
-
-  return {
-    coins: Math.max(5, Math.floor(Number(base.coins || 0) * 0.4)),
-    xp: Math.max(2, Math.floor(Number(base.xp || 0) * 0.4)),
-    tokens: 0,
-    firstTime: false,
-  };
 }
 
 /* ============================
@@ -650,13 +757,17 @@ function speakRewardSequence({
   rewardXp,
   newLevel,
   oldLevel,
+  fullCaptureJustUnlocked,
 }) {
   const mode = getRewardPresentationMode();
   const levelUpText =
     newLevel > oldLevel ? ` You reached level ${newLevel}.` : "";
+  const captureText = fullCaptureJustUnlocked
+    ? " Node fully captured."
+    : " Progress saved.";
 
   if (mode === "kid") {
-    const line = `${factText}. You earned ${rewardCoins} coins and ${rewardXp} XP.${levelUpText}`;
+    const line = `${factText}. You earned ${rewardCoins} coins and ${rewardXp} XP.${captureText}${levelUpText}`;
     speakText(line);
     return 1200;
   }
@@ -665,11 +776,11 @@ function speakRewardSequence({
     const intro = `Correct. You earned ${rewardCoins} coins and ${rewardXp} XP.`;
     const fact = factText ? ` ${factText}.` : "";
     const level = levelUpText ? ` ${levelUpText.trim()}` : "";
-    speakText(`${intro}${fact}${level}`);
+    speakText(`${intro}${fact}${captureText}${level}`);
     return 1100;
   }
 
-  const adultLine = `${factText}.${levelUpText} You earned ${rewardCoins} coins and ${rewardXp} XP.`;
+  const adultLine = `${factText}.${captureText}${levelUpText} You earned ${rewardCoins} coins and ${rewardXp} XP.`;
   speakText(adultLine);
   return 1500;
 }
@@ -860,10 +971,10 @@ function createHeroIcon() {
 }
 
 function createPinIcon(pin) {
-  const completed = isPinCompleted(pin);
+  const status = getCaptureStatus(pin);
   const icon = pin.i || "📍";
 
-  if (completed) {
+  if (status.fullyCaptured) {
     return L.divIcon({
       className: "marker-logo",
       html: `
@@ -883,6 +994,36 @@ function createPinIcon(pin) {
       `,
       iconSize: [38, 38],
       iconAnchor: [19, 19],
+    });
+  }
+
+  if (status.completedCount > 0) {
+    return L.divIcon({
+      className: "marker-logo",
+      html: `
+        <div style="position:relative;width:42px;height:42px;display:flex;align-items:center;justify-content:center;">
+          <div style="font-size:28px;line-height:1;">${icon}</div>
+          <div style="
+            position:absolute;
+            right:-4px;
+            bottom:-4px;
+            min-width:20px;
+            height:20px;
+            padding:0 4px;
+            border-radius:999px;
+            background:#ffd54a;
+            color:#111;
+            font-size:11px;
+            font-weight:900;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            border:2px solid #111;
+          ">${status.completedCount}/${status.required}</div>
+        </div>
+      `,
+      iconSize: [42, 42],
+      iconAnchor: [21, 21],
     });
   }
 
@@ -1008,7 +1149,7 @@ function getClassicModePoolForPin(pin) {
   return unique.filter(Boolean);
 }
 
-function pickClassicModesForPin(pin, count = 4) {
+function pickClassicModesForPin(pin, count = 6) {
   const pool = getClassicModePoolForPin(pin);
   const primary = normaliseClassicModeFromPin(pin);
   const selected = [];
@@ -1038,7 +1179,7 @@ function renderClassicModeChoices(pin) {
   const tiles = Array.from(document.querySelectorAll(".m-tile"));
   if (!tiles.length) return;
 
-  const chosenModes = pickClassicModesForPin(pin, 4);
+  const chosenModes = pickClassicModesForPin(pin, 6);
   const chosenSet = new Set(chosenModes);
 
   tiles.forEach((tile) => {
@@ -1058,8 +1199,10 @@ function renderClassicModeChoices(pin) {
     tile.classList.remove("hidden");
 
     const meta = CLASSIC_MODE_META[mode];
+    const done = isModeCompletedForPin(pin, mode);
     if (meta) {
-      tile.innerHTML = `<span>${meta.icon}</span>${meta.label}`;
+      tile.innerHTML = `<span>${done ? "✅" : meta.icon}</span>${meta.label}`;
+      tile.style.opacity = done ? "0.75" : "1";
     }
   });
 }
@@ -1154,15 +1297,17 @@ function renderPins() {
       currentPin = pin;
       showActionButton(true);
 
-      const completed = isPinCompleted(pin);
+      const status = getCaptureStatus(pin);
       updateCaptureText(
-        completed ? `${pin.n} • COMPLETED • REPLAY` : `${pin.n} • READY`
+        status.fullyCaptured
+          ? `${pin.n} • CAPTURED • REPLAY`
+          : `${pin.n} • ${status.completedCount}/${status.required} CAPTURED`
       );
 
       speakText(
-        completed
-          ? `${pin.n}. Completed already. Replay available.`
-          : `${pin.n}. Ready.`
+        status.fullyCaptured
+          ? `${pin.n}. Fully captured. Replay available.`
+          : `${pin.n}. ${status.completedCount} out of ${status.required} captured.`
       );
     });
 
@@ -1232,9 +1377,11 @@ function startLocationWatch() {
       currentPin = nearby;
 
       if (nearby) {
-        const completed = isPinCompleted(nearby);
+        const status = getCaptureStatus(nearby);
         updateCaptureText(
-          completed ? `${nearby.n} • COMPLETED • REPLAY` : `${nearby.n} • READY`
+          status.fullyCaptured
+            ? `${nearby.n} • CAPTURED • REPLAY`
+            : `${nearby.n} • ${status.completedCount}/${status.required} CAPTURED`
         );
         showActionButton(true);
       } else {
@@ -1260,17 +1407,25 @@ function openMissionMenu() {
 
   if ($("q-name")) $("q-name").innerText = currentPin.n;
 
-  const completed = isPinCompleted(currentPin);
+  const status = getCaptureStatus(currentPin);
 
   if ($("quest-status")) {
+    const requiredText = status.mustInclude.length
+      ? ` • REQUIRED: ${status.mustInclude.join(", ").toUpperCase()}`
+      : "";
+
     $("quest-status").innerText =
       state.activePack === "adult"
         ? `STATUS: CASE MODE • ${String(
             state.activeAdultCategory || "GENERAL"
-          ).toUpperCase()}${completed ? " • COMPLETED" : ""}`
-        : `STATUS: ${state.mapMode.toUpperCase()} • ${String(
-            currentPin.type || "quiz"
-          ).toUpperCase()}${completed ? " • COMPLETED" : ""}`;
+          ).toUpperCase()} • ${status.completedCount}/${status.required} CAPTURED${
+            status.fullyCaptured ? " • FULLY CAPTURED" : ""
+          }`
+        : `STATUS: ${state.mapMode.toUpperCase()} • ${status.completedCount}/${
+            status.required
+          } CAPTURED${requiredText}${
+            status.fullyCaptured ? " • FULLY CAPTURED" : ""
+          }`;
   }
 
   if ($("mode-banner")) {
@@ -1285,15 +1440,21 @@ function openMissionMenu() {
         ? "PARK"
         : "ABBEY";
 
-    $("mode-banner").innerText = completed
-      ? `${label}\n${currentPin.n}\nCOMPLETED`
-      : `${label}\n${currentPin.n}`;
+    $("mode-banner").innerText = status.fullyCaptured
+      ? `${label}\n${currentPin.n}\nFULLY CAPTURED`
+      : `${label}\n${currentPin.n}\n${status.completedCount}/${status.required} CAPTURED`;
   }
 
   if ($("boss-banner")) {
     const isBoss = currentPin.type === "boss";
-    $("boss-banner").style.display = isBoss ? "block" : "none";
-    $("boss-banner").innerText = isBoss ? "FINAL TRIAL ACTIVE" : "";
+    const missingRequiredText = status.missingRequired.length
+      ? `REQUIRED STILL NEEDED: ${status.missingRequired.join(", ").toUpperCase()}`
+      : "";
+    $("boss-banner").style.display =
+      isBoss || status.missingRequired.length ? "block" : "none";
+    $("boss-banner").innerText = isBoss
+      ? "FINAL TRIAL ACTIVE"
+      : missingRequiredText;
   }
 
   let storyText = "";
@@ -1405,7 +1566,10 @@ function openTask(mode) {
     mode,
     pin: currentPin,
     question: task,
+    speedStartedAt: null,
   };
+
+  const status = getCaptureStatus(currentPin);
 
   if ($("task-title")) {
     $("task-title").innerText =
@@ -1415,8 +1579,16 @@ function openTask(mode) {
   }
 
   if ($("task-desc")) {
+    const requiredText = status.mustInclude.includes(mode)
+      ? `\n\nREQUIRED FOR FULL CAPTURE`
+      : "";
+    const doneText = isModeCompletedForPin(currentPin, mode)
+      ? `\n\nTHIS MODE ALREADY COMPLETED`
+      : "";
     $("task-desc").innerText =
-      task?.desc || task?.q || "No mission found for this location.";
+      (task?.desc || task?.q || "No mission found for this location.") +
+      requiredText +
+      doneText;
   }
 
   setTaskBlock("task-block-story", "task-story", task?.story || "");
@@ -1436,6 +1608,53 @@ function openTask(mode) {
   showModal("task-modal");
 }
 
+function buildManualTaskButtons(question) {
+  const wrap = $("task-options");
+  const readBtn = $("btn-read-answers");
+  if (!wrap || !currentTask) return;
+
+  wrap.innerHTML = "";
+  wrap.style.display = "grid";
+  if (readBtn) readBtn.classList.add("hidden");
+
+  const mode = currentTask.mode;
+
+  if (mode === "speed") {
+    const startBtn = document.createElement("button");
+    startBtn.className = "mcq-btn";
+    startBtn.innerText = "START SPEED TIMER";
+    startBtn.addEventListener("click", () => {
+      currentTask.speedStartedAt = Date.now();
+      if ($("task-feedback")) {
+        $("task-feedback").style.display = "block";
+        $("task-feedback").style.color = "var(--gold)";
+        $("task-feedback").innerText = "Speed timer started. Finish within 20 seconds.";
+      }
+      speakText("Speed timer started.");
+    });
+
+    const completeBtn = document.createElement("button");
+    completeBtn.className = "mcq-btn";
+    completeBtn.innerText = "COMPLETE SPEED TASK";
+    completeBtn.addEventListener("click", () => completeCurrentTaskManually());
+
+    wrap.appendChild(startBtn);
+    wrap.appendChild(completeBtn);
+    return;
+  }
+
+  const confirmBtn = document.createElement("button");
+  confirmBtn.className = "mcq-btn";
+
+  if (mode === "activity") confirmBtn.innerText = "CONFIRM ACTIVITY COMPLETE";
+  else if (mode === "family") confirmBtn.innerText = "CONFIRM FAMILY COMPLETE";
+  else if (mode === "history") confirmBtn.innerText = "MARK HISTORY COMPLETE";
+  else confirmBtn.innerText = "CONFIRM COMPLETE";
+
+  confirmBtn.addEventListener("click", () => completeCurrentTaskManually());
+  wrap.appendChild(confirmBtn);
+}
+
 function renderTaskOptions(question) {
   const wrap = $("task-options");
   const readBtn = $("btn-read-answers");
@@ -1443,9 +1662,10 @@ function renderTaskOptions(question) {
 
   wrap.innerHTML = "";
 
-  if (!question?.options?.length) {
-    wrap.style.display = "none";
-    if (readBtn) readBtn.classList.add("hidden");
+  const hasOptions = Array.isArray(question?.options) && question.options.length;
+
+  if (!hasOptions) {
+    buildManualTaskButtons(question);
     if ($("task-feedback")) {
       $("task-feedback").style.display = "none";
       $("task-feedback").innerText = "";
@@ -1640,6 +1860,143 @@ function rememberQuestion(questionId) {
   }
 }
 
+function applyMissionOutcome({
+  isCorrect = true,
+  manual = false,
+}) {
+  if (!currentTask) return;
+
+  const q = currentTask.question || {};
+  const feedback = $("task-feedback");
+  const pin = currentTask.pin;
+  const mode = currentTask.mode;
+
+  if (!pin || !feedback) return;
+
+  const wasAlreadyDone = isModeCompletedForPin(pin, mode);
+  const missionReward = getMissionReward({
+    mode,
+    isNewMode: !wasAlreadyDone,
+  });
+
+  const questionId = q?.meta?.questionId || q?.id || null;
+  const active = getActivePlayer();
+
+  if (active && missionReward.coins) {
+    updateCoins(active.id, missionReward.coins);
+  }
+
+  const oldLevel = getLevelFromXP(Number(state.meta.xp || 0));
+  state.meta.xp = Number(state.meta.xp || 0) + Number(missionReward.xp || 0);
+  state.meta.tokens =
+    Number(state.meta.tokens || 0) + Number(missionReward.tokens || 0);
+
+  const missionRecord = recordMissionCompletion(
+    pin,
+    mode,
+    missionReward,
+    questionId
+  );
+
+  let rewardCoins = Number(missionReward.coins || 0);
+  let rewardXp = Number(missionReward.xp || 0);
+  let rewardTokens = Number(missionReward.tokens || 0);
+
+  if (missionRecord.fullCaptureJustUnlocked) {
+    const bonus = getFullCaptureBonus(pin);
+    rewardCoins += Number(bonus.coins || 0);
+    rewardXp += Number(bonus.xp || 0);
+    rewardTokens += Number(bonus.tokens || 0);
+
+    if (active && bonus.coins) {
+      updateCoins(active.id, bonus.coins);
+    }
+
+    state.meta.xp = Number(state.meta.xp || 0) + Number(bonus.xp || 0);
+    state.meta.tokens =
+      Number(state.meta.tokens || 0) + Number(bonus.tokens || 0);
+  }
+
+  const newLevel = getLevelFromXP(Number(state.meta.xp || 0));
+
+  rememberQuestion(questionId);
+  rememberQuestionTags(q?.meta?.tags || []);
+
+  if (mode === "quiz") {
+    const tier = getEffectiveTier();
+    const currentProfile =
+      state.quizProfiles?.[tier] || getDefaultAdaptiveProfile(tier);
+
+    state.quizProfiles[tier] = updateAdaptiveProfile(currentProfile, {
+      tier,
+      isCorrect,
+      difficulty: q?.meta?.difficulty,
+      tags: q?.meta?.tags || [],
+      questionId,
+    });
+  }
+
+  const mystery = missionRecord.fullCaptureJustUnlocked ? maybeUnlockMystery() : null;
+
+  checkBadgeUnlocksByCaptures();
+
+  saveState();
+  renderHUD();
+  renderShop();
+  renderHomeLog();
+  refreshPinMarker(pin);
+  renderClassicModeChoices(pin);
+
+  const status = getCaptureStatus(pin);
+  const factText = q.fact || q.desc || "Mission complete.";
+
+  feedback.style.display = "block";
+  feedback.style.color = "var(--neon)";
+
+  const lines = [];
+  lines.push(wasAlreadyDone ? "MODE REPLAY COMPLETE" : "MODE COMPLETE");
+  lines.push(`${status.completedCount}/${status.required} CAPTURED`);
+
+  if (status.missingRequired.length) {
+    lines.push(`Still required: ${status.missingRequired.join(", ")}`);
+  }
+
+  lines.push("");
+  lines.push(factText);
+  lines.push("");
+  lines.push(`+${rewardCoins} coins`);
+  lines.push(`+${rewardXp} XP`);
+  if (rewardTokens) lines.push(`+${rewardTokens} tokens`);
+
+  if (missionRecord.fullCaptureJustUnlocked) {
+    lines.push("");
+    lines.push("FULL NODE CAPTURE COMPLETE");
+  }
+
+  if (mystery) {
+    lines.push("");
+    lines.push(`BONUS MYSTERY UNLOCKED`);
+    lines.push(`${mystery.icon || "❓"} ${mystery.title}`);
+  }
+
+  feedback.innerText = lines.join("\n");
+
+  const imageDelay = speakRewardSequence({
+    factText,
+    rewardCoins,
+    rewardXp,
+    newLevel,
+    oldLevel,
+    fullCaptureJustUnlocked: missionRecord.fullCaptureJustUnlocked,
+  });
+
+  if (missionRecord.fullCaptureJustUnlocked) {
+    setTimeout(() => {
+      showRewardImage(pin, factText);
+    }, imageDelay);
+  }
+}
+
 function answerMission(index) {
   if (!currentTask) return;
 
@@ -1686,90 +2043,35 @@ function answerMission(index) {
     return;
   }
 
-  const active = getActivePlayer();
-  const rewardResult = getRewardForMission({
-    mode: currentTask.mode,
-    correct: true,
-  });
+  applyMissionOutcome({ isCorrect: true });
+}
 
-  const rewardCoins = Number(rewardResult.coins || 0);
-  const rewardXp = Number(rewardResult.xp || 0);
+function completeCurrentTaskManually() {
+  if (!currentTask) return;
 
-  if (active && rewardCoins) {
-    updateCoins(active.id, rewardCoins);
+  const feedback = $("task-feedback");
+  if (!feedback) return;
+
+  if (currentTask.mode === "speed") {
+    if (!currentTask.speedStartedAt) {
+      feedback.style.display = "block";
+      feedback.style.color = "#ff6b6b";
+      feedback.innerText = "Start the speed timer first.";
+      speakText("Start the speed timer first.");
+      return;
+    }
+
+    const elapsed = Date.now() - currentTask.speedStartedAt;
+    if (elapsed > 20000) {
+      feedback.style.display = "block";
+      feedback.style.color = "#ff6b6b";
+      feedback.innerText = "Speed task failed. Time ran out.";
+      speakText("Speed task failed. Time ran out.");
+      return;
+    }
   }
 
-  const oldLevel = getLevelFromXP(Number(state.meta.xp || 0));
-  state.meta.xp = Number(state.meta.xp || 0) + rewardXp;
-  state.meta.tokens =
-    Number(state.meta.tokens || 0) + Number(rewardResult.tokens || 0);
-  const newLevel = getLevelFromXP(Number(state.meta.xp || 0));
-
-  const questionId = q?.meta?.questionId || q?.id || null;
-  rememberQuestion(questionId);
-  rememberQuestionTags(q?.meta?.tags || []);
-
-  if (currentTask.mode === "quiz") {
-    const tier = getEffectiveTier();
-    const currentProfile =
-      state.quizProfiles?.[tier] || getDefaultAdaptiveProfile(tier);
-
-    state.quizProfiles[tier] = updateAdaptiveProfile(currentProfile, {
-      tier,
-      isCorrect: true,
-      difficulty: q?.meta?.difficulty,
-      tags: q?.meta?.tags || [],
-      questionId,
-    });
-  }
-
-  const completion = recordPinCompletion(
-    currentTask.pin,
-    currentTask.mode,
-    rewardResult,
-    questionId
-  );
-
-  const mystery = maybeUnlockMystery();
-
-  checkBadgeUnlocksByCaptures();
-
-  saveState();
-  renderHUD();
-  renderShop();
-  renderHomeLog();
-  refreshPinMarker(currentTask.pin);
-
-  feedback.style.color = "var(--neon)";
-
-  const firstLabel = completion.firstTime
-    ? "NEW LOCATION COMPLETE"
-    : "REPLAY COMPLETE";
-
-  const factText = q.fact || q.desc || "Mission complete.";
-
-  feedback.innerText =
-    `${firstLabel}\n` +
-    `${factText}\n\n` +
-    `+${rewardCoins} coins\n` +
-    `+${rewardXp} XP`;
-
-  if (mystery) {
-    feedback.innerText += `\n\nBONUS MYSTERY UNLOCKED\n${mystery.icon || "❓"} ${mystery.title}`;
-  }
-
-  const imageDelay = speakRewardSequence({
-    factText,
-    rewardCoins,
-    rewardXp,
-    newLevel,
-    oldLevel,
-    mystery,
-  });
-
-  setTimeout(() => {
-    showRewardImage(currentTask.pin, factText);
-  }, imageDelay);
+  applyMissionOutcome({ isCorrect: true, manual: true });
 }
 
 /* ============================
@@ -1812,7 +2114,7 @@ function renderHomeLog() {
       <div><strong>LEVEL:</strong> ${level}</div>
       <div><strong>XP:</strong> ${xp} (${levelProgress}/100 to next level)</div>
       <div><strong>BADGES:</strong> ${badges.length}</div>
-      <div><strong>NODES CAPTURED:</strong> ${Number(
+      <div><strong>FULL NODES CAPTURED:</strong> ${Number(
         state.pinStats?.totalFirstCompletions || 0
       )}</div>
       <div><strong>PACK:</strong> ${state.activePack}</div>
@@ -1824,11 +2126,11 @@ function renderHomeLog() {
         Number(quizProfile.confidence || 0) * 100
       )}%</div>
       <div><strong>PINS LOADED:</strong> ${pins.length}</div>
-      <div><strong>MODE COMPLETED:</strong> ${currentProgress.completed}/${currentProgress.total} (${currentProgress.percent}%)</div>
+      <div><strong>MODE FULLY CAPTURED:</strong> ${currentProgress.completed}/${currentProgress.total} (${currentProgress.percent}%)</div>
       <div><strong>MODE REMAINING:</strong> ${currentProgress.remaining}</div>
       <div><strong>MYSTERIES UNLOCKED:</strong> ${mysteryCount}</div>
       <div><strong>COMPLETED PROMPTS TRACKED:</strong> ${completedCount}</div>
-      <div><strong>TOTAL FIRST COMPLETIONS:</strong> ${Number(
+      <div><strong>TOTAL FIRST CAPTURES:</strong> ${Number(
         state.pinStats?.totalFirstCompletions || 0
       )}</div>
     </div>
@@ -1874,21 +2176,22 @@ function renderHomeLog() {
     pins
       .slice(0, 50)
       .map((pin) => {
-        const progress = getPinProgress(pin);
-        const done = !!progress;
+        const status = getCaptureStatus(pin);
         return `
         <div style="padding:10px;border:1px solid #333;border-radius:12px;margin:8px 0;background:${
-          done ? "rgba(77,255,158,0.08)" : "#111"
+          status.fullyCaptured ? "rgba(77,255,158,0.08)" : "#111"
         };">
-          <div style="font-weight:bold;">${done ? "✅ " : ""}${pin.n}</div>
+          <div style="font-weight:bold;">${
+            status.fullyCaptured ? "✅ " : ""
+          }${pin.n}</div>
           <div style="opacity:.85;font-size:12px;">${
             pin.zone || pin.set || pin.category || "unknown"
           }</div>
           <div style="margin-top:6px;font-size:12px;opacity:.82;">
-            ${
-              done
-                ? `Completed ${Number(progress.completionCount || 1)} time(s)`
-                : "Not completed yet"
+            ${status.completedCount}/${status.required} captured${
+              status.mustInclude.length
+                ? ` • required: ${status.mustInclude.join(", ")}`
+                : ""
             }
           </div>
         </div>
