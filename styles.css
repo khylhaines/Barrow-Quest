@@ -181,6 +181,16 @@ button {
   margin-right: auto;
 }
 
+/* START SCREEN MONK BACKGROUND */
+#start-modal {
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.68), rgba(0, 0, 0, 0.82)),
+    url("./monk.jpg");
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+}
+
 .modal-header {
   display: flex;
   align-items: center;
