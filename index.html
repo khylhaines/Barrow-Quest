@@ -172,7 +172,74 @@
       </div>
 
       <div class="setting-row">
-        <h3>PLAYERS</h3>
+        <h3>📢 BROADCAST</h3>
+        <div class="settings-mini" style="margin-bottom: 10px">
+          Send a spoken message through the app narrator.
+        </div>
+
+        <textarea
+          id="broadcast-input"
+          placeholder="Type a message to read out..."
+          style="
+            width: 100%;
+            min-height: 96px;
+            background: #111827;
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 14px;
+            padding: 12px;
+            resize: vertical;
+          "
+        ></textarea>
+
+        <button
+          type="button"
+          class="win-btn"
+          id="btn-send-broadcast"
+          style="margin-top: 10px"
+        >
+          SEND
+        </button>
+      </div>
+
+      <div class="setting-row">
+        <h3>📝 CAPTAIN NOTES</h3>
+        <div class="settings-mini" style="margin-bottom: 10px">
+          Save reminders, clues, or mission notes.
+        </div>
+
+        <textarea
+          id="captain-note-input"
+          placeholder="Write a captain note..."
+          style="
+            width: 100%;
+            min-height: 96px;
+            background: #111827;
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 14px;
+            padding: 12px;
+            resize: vertical;
+          "
+        ></textarea>
+
+        <button
+          type="button"
+          class="win-btn"
+          id="btn-save-captain-note"
+          style="margin-top: 10px"
+        >
+          SAVE NOTE
+        </button>
+
+        <div
+          id="captain-notes-list"
+          style="display:grid;gap:10px;margin-top:14px;"
+        ></div>
+      </div>
+
+      <div class="setting-row">
+        <h3>👥 PLAYER TEAM SETUP</h3>
         <div style="display: grid; gap: 10px">
           <button class="win-btn" id="btn-player-1" type="button">
             1 PLAYER
@@ -187,11 +254,8 @@
             4 PLAYERS
           </button>
         </div>
-      </div>
 
-      <div class="setting-row">
-        <h3>ACTIVE PLAYER</h3>
-        <div style="display: flex; gap: 10px">
+        <div style="display:flex;gap:10px;margin-top:12px;">
           <button class="win-btn" id="btn-hp-k" type="button">PLAYER 1</button>
           <button class="win-btn" id="btn-hp-p" type="button">PLAYER 2</button>
         </div>
