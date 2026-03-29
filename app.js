@@ -13,7 +13,7 @@ import { getRandomMystery } from "./mysteries.js";
 
 const $ = (id) => document.getElementById(id);
 
-const SAVE_KEY = "bq_world_v13";
+const SAVE_KEY = "bq_world_v15";
 
 const BADGE_MILESTONES = [
   { captures: 1, name: "Scout", icon: "🧭" },
@@ -23,6 +23,25 @@ const BADGE_MILESTONES = [
   { captures: 50, name: "Adventurer", icon: "⚔️" },
   { captures: 100, name: "Legend", icon: "👑" },
 ];
+
+const PIN_REWARD_IMAGES = {
+  park_cenotaph: {
+    src: "./images/rewards/cenotaph.jpg",
+    caption: "The Cenotaph complete.",
+  },
+  park_bandstand: {
+    src: "./images/rewards/bandstand.jpg",
+    caption: "Bandstand complete.",
+  },
+  park_leisure_centre: {
+    src: "./images/rewards/leisure.jpg",
+    caption: "Leisure Centre complete.",
+  },
+  park_mini_railway: {
+    src: "./images/rewards/railway.jpg",
+    caption: "Mini Railway complete.",
+  },
+};
 
 const DEFAULT_STATE = {
   players: [
@@ -241,7 +260,10 @@ function loadState() {
         parsed.quizProfiles && typeof parsed.quizProfiles === "object"
           ? {
               kid: normaliseAdaptiveProfile(parsed.quizProfiles.kid || {}, "kid"),
-              teen: normaliseAdaptiveProfile(parsed.quizProfiles.teen || {}, "teen"),
+              teen: normaliseAdaptiveProfile(
+                parsed.quizProfiles.teen || {},
+                "teen"
+              ),
               adult: normaliseAdaptiveProfile(
                 parsed.quizProfiles.adult || {},
                 "adult"
@@ -349,6 +371,34 @@ function checkBadgeUnlocksByCaptures() {
 }
 
 /* ============================
+   REWARD IMAGES
+============================ */
+function getRewardImageForPin(pin) {
+  if (!pin?.id) return null;
+  return PIN_REWARD_IMAGES[pin.id] || null;
+}
+
+function showRewardImage(pin, fallbackText = "") {
+  const reward = getRewardImageForPin(pin);
+  if (!reward || !reward.src) return;
+
+  const img = $("reward-image");
+  const caption = $("reward-image-caption");
+
+  if (!img || !caption) return;
+
+  img.src = reward.src;
+  img.alt = pin?.n || "Reward";
+  caption.innerText = reward.caption || fallbackText || "";
+
+  showModal("reward-image-modal");
+}
+
+function closeRewardImageModal() {
+  closeModal("reward-image-modal");
+}
+
+/* ============================
    PROGRESSION / COMPLETION
 ============================ */
 function getPinProgressKey(pin) {
@@ -452,6 +502,48 @@ function getRewardForMission({ mode, correct }) {
     tokens: 0,
     firstTime: false,
   };
+}
+
+/* ============================
+   PRESENTATION MODES
+============================ */
+function getRewardPresentationMode() {
+  if (state.activePack === "adult") return "adult";
+
+  const tier = getEffectiveTier();
+  if (tier === "kid") return "kid";
+  if (tier === "teen") return "teen";
+  return "adult";
+}
+
+function speakRewardSequence({
+  factText,
+  rewardCoins,
+  rewardXp,
+  newLevel,
+  oldLevel,
+}) {
+  const mode = getRewardPresentationMode();
+  const levelUpText =
+    newLevel > oldLevel ? ` You reached level ${newLevel}.` : "";
+
+  if (mode === "kid") {
+    const line = `${factText}. You earned ${rewardCoins} coins and ${rewardXp} XP.${levelUpText}`;
+    speakText(line);
+    return 1200;
+  }
+
+  if (mode === "teen") {
+    const intro = `Correct. You earned ${rewardCoins} coins and ${rewardXp} XP.`;
+    const fact = factText ? ` ${factText}.` : "";
+    const level = levelUpText ? ` ${levelUpText.trim()}` : "";
+    speakText(`${intro}${fact}${level}`);
+    return 1100;
+  }
+
+  const adultLine = `${factText}.${levelUpText} You earned ${rewardCoins} coins and ${rewardXp} XP.`;
+  speakText(adultLine);
+  return 1500;
 }
 
 /* ============================
@@ -735,7 +827,15 @@ function getClassicModePoolForPin(pin) {
   const worldPools = {
     core: ["quiz", "history", "logic", "activity", "family", "speed"],
     park: ["quiz", "history", "activity", "family", "speed", "logic"],
-    abbey: ["history", "quiz", "logic", "activity", "ghost", "family", "speed"],
+    abbey: [
+      "history",
+      "quiz",
+      "logic",
+      "activity",
+      "ghost",
+      "family",
+      "speed",
+    ],
   };
 
   pushUnique(primary);
@@ -1443,6 +1543,7 @@ function answerMission(index) {
 
     feedback.style.color = "#ff6b6b";
     feedback.innerText = `Wrong answer.\nCorrect answer: ${correctAnswer}`;
+
     speakText(`Wrong answer. The correct answer is ${correctAnswer}.`);
 
     if (currentTask.mode === "quiz") {
@@ -1480,7 +1581,8 @@ function answerMission(index) {
 
   const oldLevel = getLevelFromXP(Number(state.meta.xp || 0));
   state.meta.xp = Number(state.meta.xp || 0) + rewardXp;
-  state.meta.tokens = Number(state.meta.tokens || 0) + Number(rewardResult.tokens || 0);
+  state.meta.tokens =
+    Number(state.meta.tokens || 0) + Number(rewardResult.tokens || 0);
   const newLevel = getLevelFromXP(Number(state.meta.xp || 0));
 
   const questionId = q?.meta?.questionId || q?.id || null;
@@ -1523,35 +1625,31 @@ function answerMission(index) {
   const firstLabel = completion.firstTime
     ? "NEW LOCATION COMPLETE"
     : "REPLAY COMPLETE";
-  const rewardLine = `+${rewardCoins} coins +${rewardXp} XP`;
+
+  const factText = q.fact || q.desc || "Mission complete.";
+
+  feedback.innerText =
+    `${firstLabel}\n` +
+    `${factText}\n\n` +
+    `+${rewardCoins} coins\n` +
+    `+${rewardXp} XP`;
 
   if (mystery) {
-    feedback.innerText =
-      `${firstLabel}\n${rewardLine}\n\n` +
-      `BONUS MYSTERY UNLOCKED\n` +
-      `${mystery.icon || "❓"} ${mystery.title}\n\n` +
-      `${mystery.story}\n\n` +
-      `${mystery.evidence || ""}`;
-
-    speakText(
-      `${firstLabel}. ${rewardCoins} coins awarded. ${rewardXp} experience. Bonus mystery unlocked. ${mystery.title}.`
-    );
-  } else {
-    feedback.innerText =
-      `${firstLabel}\n${rewardLine}\n\n` + `${q.fact || "Mission complete."}`;
-
-    if (newLevel > oldLevel) {
-      speakText(
-        `Level up. You reached level ${newLevel}. ${q.fact || "Mission complete."}`
-      );
-    } else {
-      speakText(
-        `${firstLabel}. ${rewardCoins} coins awarded. ${rewardXp} experience. ${
-          q.fact || "Mission complete."
-        }`
-      );
-    }
+    feedback.innerText += `\n\nBONUS MYSTERY UNLOCKED\n${mystery.icon || "❓"} ${mystery.title}`;
   }
+
+  const imageDelay = speakRewardSequence({
+    factText,
+    rewardCoins,
+    rewardXp,
+    newLevel,
+    oldLevel,
+    mystery,
+  });
+
+  setTimeout(() => {
+    showRewardImage(currentTask.pin, factText);
+  }, imageDelay);
 }
 
 /* ============================
@@ -1638,7 +1736,12 @@ function renderHomeLog() {
         <div style="font-weight:bold;color:var(--gold);">NODE BADGES</div>
         <div style="margin-top:8px;font-size:13px;line-height:1.6;">
           ${badges
-            .map((b) => `${b.icon} ${b.name} (${b.captures} node${b.captures === 1 ? "" : "s"})`)
+            .map(
+              (b) =>
+                `${b.icon} ${b.name} (${b.captures} node${
+                  b.captures === 1 ? "" : "s"
+                })`
+            )
             .join("<br>")}
         </div>
       </div>
@@ -1833,6 +1936,12 @@ function wireButtons() {
       speakOptions(currentTask.question.options);
     }
   });
+
+  $("btn-reward-image-close")?.addEventListener("click", closeRewardImageModal);
+  $("btn-reward-image-close-x")?.addEventListener(
+    "click",
+    closeRewardImageModal
+  );
 
   $("action-trigger")?.addEventListener("click", openMissionMenu);
 
