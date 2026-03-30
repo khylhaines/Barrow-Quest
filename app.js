@@ -56,31 +56,6 @@ function createBackupSnapshot(payload) {
   }
 }
 
-function buildSavePayloadFromState(sourceState) {
-  return {
-    ...sourceState,
-    storage: {
-      ...computeStorageHealth(),
-      ...(sourceState.storage || {}),
-      version: SAVE_VERSION,
-    },
-    saveVersion: SAVE_VERSION,
-  };
-}
-
-function buildSavePayload() {
-  return {
-    ...state,
-    storage: {
-      ...computeStorageHealth(),
-      ...(state.storage || {}),
-      version: SAVE_VERSION,
-      savedAt: new Date().toISOString(),
-    },
-    saveVersion: SAVE_VERSION,
-  };
-}
-
 function saveStateNow(force = false) {
   try {
     const payload = buildSavePayload();
@@ -141,7 +116,6 @@ function resetAllProgress() {
     state = structuredClone(DEFAULT_STATE);
     saveStateNow(true);
     renderEverything();
-    resetMap();
     return true;
   } catch (err) {
     console.error("RESET FAILED:", err);
@@ -312,13 +286,6 @@ const DEFAULT_STATE = {
       finished: false,
     },
   },
-
-  replay: {
-    core: { resets: 0, bonusReady: false },
-    park: { resets: 0, bonusReady: false },
-    abbey: { resets: 0, bonusReady: false },
-    adult: { resets: 0, bonusReady: false },
-  },
 };
 
 const SHOP_ITEMS = [
@@ -399,7 +366,7 @@ const ABBEY_ROUTE_DEFS = {
           "You’ve stepped onto the monks’ route. Hidden movement mattered here.",
         clue: { value: "2", importance: "high", saveLabel: "Hidden Path = 2" },
         rebuild: 2,
-        reward: { coins: 22, xp: 12, tokens: 1 },
+        reward: { coins: 22, xp: 12 },
       },
       {
         title: "Control and Structure",
@@ -412,7 +379,7 @@ const ABBEY_ROUTE_DEFS = {
         fact:
           "The Abbey worked because everything followed structure and routine.",
         rebuild: 2,
-        reward: { coins: 24, xp: 14, tokens: 1 },
+        reward: { coins: 24, xp: 14 },
       },
       {
         title: "Work and Life",
@@ -430,7 +397,7 @@ const ABBEY_ROUTE_DEFS = {
           saveLabel: "Work and Worship = 4",
         },
         rebuild: 3,
-        reward: { coins: 28, xp: 16, tokens: 1 },
+        reward: { coins: 28, xp: 16 },
       },
       {
         title: "The Purpose",
@@ -447,7 +414,7 @@ const ABBEY_ROUTE_DEFS = {
           saveLabel: "Protected Knowledge = 6",
         },
         rebuild: 5,
-        reward: { coins: 36, xp: 22, tokens: 2 },
+        reward: { coins: 36, xp: 22 },
         routeComplete: true,
       },
     ],
@@ -469,7 +436,7 @@ const ABBEY_ROUTE_DEFS = {
         answer: 0,
         fact: "You’ve marked the first outer landmark.",
         rebuild: 1,
-        reward: { coins: 18, xp: 10, tokens: 0 },
+        reward: { coins: 18, xp: 10 },
       },
       {
         title: "Walking the Edge",
@@ -486,7 +453,7 @@ const ABBEY_ROUTE_DEFS = {
           saveLabel: "Outer Edge = 3",
         },
         rebuild: 2,
-        reward: { coins: 20, xp: 12, tokens: 1 },
+        reward: { coins: 20, xp: 12 },
       },
       {
         title: "A Place Revealed",
@@ -498,7 +465,7 @@ const ABBEY_ROUTE_DEFS = {
         answer: 0,
         fact: "You’ve restored part of the Abbey’s outer story.",
         rebuild: 3,
-        reward: { coins: 24, xp: 14, tokens: 1 },
+        reward: { coins: 24, xp: 14 },
         routeComplete: true,
       },
     ],
@@ -524,7 +491,7 @@ const ABBEY_ROUTE_DEFS = {
         answer: 1,
         fact: "Path forward unlocked.",
         rebuild: 2,
-        reward: { coins: 24, xp: 14, tokens: 1 },
+        reward: { coins: 24, xp: 14 },
       },
       {
         title: "Closer to the Core",
@@ -536,13 +503,14 @@ const ABBEY_ROUTE_DEFS = {
         answer: 1,
         fact: "You understand how the Abbey functioned.",
         rebuild: 2,
-        reward: { coins: 28, xp: 16, tokens: 1 },
+        reward: { coins: 28, xp: 16 },
       },
       {
         title: "Pre-Core Pressure",
         desc: "Answer quickly. What was the Abbey built to protect?",
         storyCategory: "loss",
-        story: "You’re almost there.\nThis is where mistakes mattered.",
+        story:
+          "You’re almost there.\nThis is where mistakes mattered.",
         options: ["Wealth", "Knowledge and belief", "Soldiers"],
         answer: 1,
         followUp: {
@@ -557,7 +525,7 @@ const ABBEY_ROUTE_DEFS = {
           saveLabel: "Core Pressure = 8",
         },
         rebuild: 4,
-        reward: { coins: 34, xp: 20, tokens: 2 },
+        reward: { coins: 34, xp: 20 },
         routeComplete: true,
       },
     ],
@@ -580,7 +548,7 @@ const ABBEY_ROUTE_DEFS = {
         fact:
           "You understand. The Abbey was held together by faith, order, labour, and shared purpose.",
         rebuild: 10,
-        reward: { coins: 150, xp: 100, tokens: 3 },
+        reward: { coins: 150, xp: 100 },
         clue: {
           value: "CORE",
           importance: "high",
@@ -740,27 +708,6 @@ function normaliseRebuild(rebuild = {}) {
   };
 }
 
-function normaliseReplay(replay = {}) {
-  return {
-    core: {
-      resets: Number.isFinite(replay?.core?.resets) ? replay.core.resets : 0,
-      bonusReady: !!replay?.core?.bonusReady,
-    },
-    park: {
-      resets: Number.isFinite(replay?.park?.resets) ? replay.park.resets : 0,
-      bonusReady: !!replay?.park?.bonusReady,
-    },
-    abbey: {
-      resets: Number.isFinite(replay?.abbey?.resets) ? replay.abbey.resets : 0,
-      bonusReady: !!replay?.abbey?.bonusReady,
-    },
-    adult: {
-      resets: Number.isFinite(replay?.adult?.resets) ? replay.adult.resets : 0,
-      bonusReady: !!replay?.adult?.bonusReady,
-    },
-  };
-}
-
 function normaliseStorage(storage = {}) {
   return {
     ...computeStorageHealth(),
@@ -843,13 +790,24 @@ function normaliseLoadedState(parsed) {
       ...structuredClone(DEFAULT_STATE.meta),
       ...(safe.meta || {}),
       badges: Array.isArray(safe?.meta?.badges) ? safe.meta.badges : [],
-      tokens: Number.isFinite(safe?.meta?.tokens) ? safe.meta.tokens : 0,
     },
 
     adultLock: normaliseAdultLock(safe.adultLock || {}),
     route: normaliseRoute(safe.route || null),
     rebuild: normaliseRebuild(safe.rebuild || {}),
-    replay: normaliseReplay(safe.replay || {}),
+  };
+}
+
+function buildSavePayload() {
+  return {
+    ...state,
+    storage: {
+      ...computeStorageHealth(),
+      ...(state.storage || {}),
+      version: SAVE_VERSION,
+      savedAt: new Date().toISOString(),
+    },
+    saveVersion: SAVE_VERSION,
   };
 }
 
@@ -880,146 +838,20 @@ function loadState() {
   }
 }
 
+function buildSavePayloadFromState(sourceState) {
+  return {
+    ...sourceState,
+    storage: {
+      ...computeStorageHealth(),
+      ...(sourceState.storage || {}),
+      version: SAVE_VERSION,
+    },
+    saveVersion: SAVE_VERSION,
+  };
+}
+
 function saveState() {
   queueSaveState();
-}
-
-/* ============================
-   RESET SYSTEM
-============================ */
-function getCurrentResetBucket() {
-  if (state.activePack === "adult") return "adult";
-  if (state.mapMode === "park") return "park";
-  if (state.mapMode === "abbey") return "abbey";
-  return "core";
-}
-
-function getResetTokenCost() {
-  if (state.activePack === "adult") return 5;
-  if (state.mapMode === "park") return 3;
-  if (state.mapMode === "abbey") return 5;
-  return 4;
-}
-
-function getCurrentMapLabel() {
-  if (state.activePack === "adult") {
-    return state.activeAdultCategory
-      ? `Adult Archive: ${String(state.activeAdultCategory)
-          .replaceAll("_", " ")
-          .toUpperCase()}`
-      : "Adult Archive";
-  }
-  if (state.mapMode === "park") return "Barrow Park";
-  if (state.mapMode === "abbey") return "Furness Abbey";
-  return "Full Barrow";
-}
-
-function buildResetConfirmationText() {
-  const label = getCurrentMapLabel();
-  const tokenCost = getResetTokenCost();
-
-  return (
-    `You are about to reset progress for ${label}.\n\n` +
-    `This will reset:\n` +
-    `- captured nodes for this map\n` +
-    `- route progress for this map\n` +
-    `- in-progress route clues for this map\n\n` +
-    `This will NOT reset:\n` +
-    `- coins\n` +
-    `- XP\n` +
-    `- badges\n` +
-    `- notes\n` +
-    `- shop items\n` +
-    `- unlocked mysteries\n\n` +
-    `Cost: ${tokenCost} tokens\n\n` +
-    `Do you want to continue?`
-  );
-}
-
-function getResetSuccessText() {
-  if (state.activePack === "adult") return "Adult archive progress reset.";
-  if (state.mapMode === "park") return "Park progress reset. Routes reopened.";
-  if (state.mapMode === "abbey") return "The Abbey paths have reopened.";
-  return "Full Barrow progress reset. Routes reopened.";
-}
-
-function removeCompletedPinsForCurrentMap() {
-  const next = {};
-
-  Object.entries(state.completedPins || {}).forEach(([key, value]) => {
-    const samePack = value?.pack === state.activePack;
-    const sameMode = value?.mapMode === state.mapMode;
-    const sameAdult =
-      state.activePack !== "adult"
-        ? true
-        : value?.adultCategory === state.activeAdultCategory;
-
-    if (samePack && sameMode && sameAdult) {
-      return;
-    }
-
-    next[key] = value;
-  });
-
-  state.completedPins = next;
-}
-
-function resetCurrentMapProgress() {
-  const cost = getResetTokenCost();
-  const currentTokens = Number(state.meta?.tokens || 0);
-
-  if (currentTokens < cost) {
-    alert(`You need ${cost} tokens to reset this map.`);
-    speakText(`You need ${cost} tokens to reset this map.`);
-    return false;
-  }
-
-  const ok = confirm(buildResetConfirmationText());
-  if (!ok) return false;
-
-  state.meta.tokens = currentTokens - cost;
-
-  removeCompletedPinsForCurrentMap();
-
-  state.pinStats = {
-    totalCompleted: 0,
-    totalFirstCompletions: 0,
-    totalRepeatCompletions: 0,
-  };
-
-  if (state.route && state.route.type === "abbey" && state.mapMode === "abbey") {
-    state.route = null;
-  }
-
-  const bucket = getCurrentResetBucket();
-  if (!state.replay || typeof state.replay !== "object") {
-    state.replay = structuredClone(DEFAULT_STATE.replay);
-  }
-
-  if (!state.replay[bucket]) {
-    state.replay[bucket] = { resets: 0, bonusReady: false };
-  }
-
-  state.replay[bucket].resets = Number(state.replay[bucket].resets || 0) + 1;
-  state.replay[bucket].bonusReady = true;
-
-  saveStateNow(true);
-  renderEverything();
-  refreshAllPinMarkers();
-  renderPins();
-
-  const message = getResetSuccessText();
-  alert(message);
-  speakText(message);
-  return true;
-}
-
-function consumeReplayBonusIfAvailable() {
-  const bucket = getCurrentResetBucket();
-  const replay = state.replay?.[bucket];
-  if (!replay?.bonusReady) return false;
-  replay.bonusReady = false;
-  return true;
 }
 
 /* ============================
@@ -1507,7 +1339,7 @@ function getMissionReward({ mode, isNewMode }) {
     return {
       coins: Math.max(6, Math.floor(Number(base.coins || 0) * 0.55)),
       xp: Math.max(4, Math.floor(Number(base.xp || 0) * 0.55)),
-      tokens: Math.max(0, Number(base.tokens || 0)),
+      tokens: 0,
     };
   }
 
@@ -1801,7 +1633,9 @@ function renderAbbeyRouteChoice() {
   });
 
   showModal("task-modal");
-  speakText("You’ve made it. Most never get this far. Choose your next move.");
+  speakText(
+    "You’ve made it. Most never get this far. Choose your next move."
+  );
 }
 
 function chooseAbbeyRoute(pathId) {
@@ -1934,7 +1768,7 @@ function runAbbeyRouteStep() {
 
   document.querySelectorAll(".abbey-step-option").forEach((btn) => {
     btn.addEventListener("click", () => {
-     answerAbbeyRouteStep(Number(btn.dataset.stepIndex || -1));
+      answerAbbeyRouteStep(Number(btn.dataset.stepIndex || -1));
     });
   });
 
@@ -1960,7 +1794,6 @@ function answerAbbeyRouteStep(index) {
   if (state.route.awaitFollowUp) {
     const follow = state.route.awaitFollowUp;
     const isCorrect = index === Number(follow.answer);
-
     if (!isCorrect) {
       feedback.style.display = "block";
       feedback.style.color = "#ff6b6b";
@@ -1975,7 +1808,6 @@ function answerAbbeyRouteStep(index) {
   }
 
   const isCorrect = index === Number(step.answer);
-
   if (!isCorrect) {
     feedback.style.display = "block";
     feedback.style.color = "#ff6b6b";
@@ -1988,7 +1820,6 @@ function answerAbbeyRouteStep(index) {
     state.route.awaitFollowUp = step.followUp;
 
     if ($("task-desc")) $("task-desc").innerText = step.followUp.desc || "";
-
     const wrap = $("task-options");
     if (wrap) {
       wrap.innerHTML = (step.followUp.options || [])
@@ -2000,7 +1831,6 @@ function answerAbbeyRouteStep(index) {
         `
         )
         .join("");
-
       document.querySelectorAll(".abbey-follow-option").forEach((btn) => {
         btn.addEventListener("click", () => {
           answerAbbeyRouteStep(Number(btn.dataset.followIndex || -1));
@@ -2024,16 +1854,13 @@ function resolveAbbeyRouteStep(step) {
 
   const feedback = $("task-feedback");
   const active = getActivePlayer();
-  const reward = step.reward || { coins: 20, xp: 10, tokens: 0 };
+  const reward = step.reward || { coins: 20, xp: 10 };
 
   if (active && reward.coins) {
     updateCoins(active.id, Number(reward.coins || 0));
   }
 
   state.meta.xp = Number(state.meta.xp || 0) + Number(reward.xp || 0);
-  state.meta.tokens =
-    Number(state.meta.tokens || 0) + Number(reward.tokens || 0);
-
   state.route.completedNodes = Number(state.route.completedNodes || 0) + 1;
   state.route.rebuildPoints =
     Number(state.route.rebuildPoints || 0) + Number(step.rebuild || 0);
@@ -2050,9 +1877,6 @@ function resolveAbbeyRouteStep(step) {
   lines.push(step.fact || "Progress made.");
   lines.push(`+${Number(reward.coins || 0)} coins`);
   lines.push(`+${Number(reward.xp || 0)} XP`);
-  if (Number(reward.tokens || 0) > 0) {
-    lines.push(`+${Number(reward.tokens || 0)} tokens`);
-  }
 
   if (step.clue) {
     lines.push("");
@@ -2070,20 +1894,9 @@ function resolveAbbeyRouteStep(step) {
 
   const narrationParts = [step.fact || "Progress made."];
   if (step.clue) narrationParts.push(clueAnnouncement);
-
-  const rewardSpeechBits = [];
-  if (Number(reward.coins || 0) > 0) {
-    rewardSpeechBits.push(`${Number(reward.coins || 0)} coins`);
-  }
-  if (Number(reward.xp || 0) > 0) {
-    rewardSpeechBits.push(`${Number(reward.xp || 0)} XP`);
-  }
-  if (Number(reward.tokens || 0) > 0) {
-    rewardSpeechBits.push(`${Number(reward.tokens || 0)} tokens`);
-  }
-  if (rewardSpeechBits.length) {
-    narrationParts.push(`Rewards earned: ${rewardSpeechBits.join(", ")}.`);
-  }
+  narrationParts.push(
+    `${Number(reward.coins || 0)} coins earned and ${Number(reward.xp || 0)} XP.`
+  );
 
   speakText(narrationParts.join(" "));
 
@@ -2092,7 +1905,6 @@ function resolveAbbeyRouteStep(step) {
     const clueButtons = step.clue
       ? `<button class="mcq-btn" id="save-route-clue-btn">SAVE CLUE TO NOTES</button>`
       : "";
-
     wrap.innerHTML = `
       <button class="mcq-btn" id="save-route-story-btn">SAVE STORY TO NOTES</button>
       ${clueButtons}
@@ -2215,7 +2027,6 @@ function finishAbbeyRoute() {
   $("abbey-route-choice-btn")?.addEventListener("click", () => {
     renderAbbeyRouteChoice();
   });
-
   $("abbey-route-close-btn")?.addEventListener("click", () => {
     closeModal("task-modal");
   });
@@ -2269,7 +2080,7 @@ function completeAbbeyCoreReward() {
 
     if (popup && icon && title && text) {
       icon.innerText = "🏛️";
-      title.innerText = "ABBEY COMPLETE";
+      title.innerText = "ABBey COMPLETE";
       text.innerText = "Abbey Conqueror";
       popup.classList.remove("hidden");
       setTimeout(() => {
@@ -2335,15 +2146,6 @@ function updateCoins(playerId, amount) {
   saveState();
   renderHUD();
   renderShop();
-}
-
-function updateTokens(amount) {
-  state.meta.tokens = Math.max(
-    0,
-    Number(state.meta?.tokens || 0) + Number(amount || 0)
-  );
-  saveState();
-  renderHUD();
 }
 
 function renderHUD() {
@@ -2776,7 +2578,7 @@ function setTaskBlock(id, bodyId, text) {
 }
 
 /* ============================
-   MAP SYSTEM
+   MAP
 ============================ */
 function initMap() {
   const [lat, lng, zoom] = getModeStart();
@@ -2798,7 +2600,9 @@ function initMap() {
 
 function resetMap() {
   if (locationWatchId != null && navigator.geolocation?.clearWatch) {
-    try { navigator.geolocation.clearWatch(locationWatchId); } catch {}
+    try {
+      navigator.geolocation.clearWatch(locationWatchId);
+    } catch {}
     locationWatchId = null;
   }
 
@@ -2836,7 +2640,13 @@ function renderPins() {
       updateCaptureText(
         status.fullyCaptured
           ? `${pin.n} • CAPTURED • REPLAY`
-          : `${pin.n} • ${status.completedCount}/${status.required}`
+          : `${pin.n} • ${status.completedCount}/${status.required} CAPTURED`
+      );
+
+      speakText(
+        status.fullyCaptured
+          ? `${pin.n}. Fully captured. Replay available.`
+          : `${pin.n}. ${status.completedCount} out of ${status.required} captured.`
       );
     });
 
@@ -2845,10 +2655,17 @@ function renderPins() {
 }
 
 function refreshAllPinMarkers() {
-  Object.keys(activeMarkers).forEach((id) => {
-    const pin = getCurrentPins().find((p) => p.id === id);
-    if (pin) activeMarkers[id].setIcon(createPinIcon(pin));
+  Object.keys(activeMarkers).forEach((pinId) => {
+    const pin = getCurrentPins().find((p) => p.id === pinId);
+    if (pin) {
+      activeMarkers[pin.id].setIcon(createPinIcon(pin));
+    }
   });
+}
+
+function refreshPinMarker(pin) {
+  if (!pin || !activeMarkers[pin.id]) return;
+  activeMarkers[pin.id].setIcon(createPinIcon(pin));
 }
 
 function showActionButton(show) {
@@ -2858,24 +2675,28 @@ function showActionButton(show) {
 }
 
 function updateCaptureText(text) {
-  const btn = $("action-trigger");
-  if (btn) btn.title = text;
+  const actionBtn = $("action-trigger");
+  if (actionBtn && text) {
+    actionBtn.title = text;
+  }
 }
 
 function distanceInMeters(aLat, aLng, bLat, bLng) {
   const R = 6371000;
-  const toRad = (d) => (d * Math.PI) / 180;
+  const toRad = (deg) => (deg * Math.PI) / 180;
 
   const dLat = toRad(bLat - aLat);
   const dLng = toRad(bLng - aLng);
 
   const aa =
-    Math.sin(dLat / 2) ** 2 +
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(toRad(aLat)) *
       Math.cos(toRad(bLat)) *
-      Math.sin(dLng / 2) ** 2;
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
 
-  return R * (2 * Math.atan2(Math.sqrt(aa), Math.sqrt(1 - aa)));
+  const c = 2 * Math.atan2(Math.sqrt(aa), Math.sqrt(1 - aa));
+  return R * c;
 }
 
 function startLocationWatch() {
@@ -2891,24 +2712,24 @@ function startLocationWatch() {
       const pins = getCurrentPins();
       const radius = Number(state.settings.radius || 35);
 
-      let found = null;
+      let nearby = null;
 
       for (const pin of pins) {
         const d = distanceInMeters(lat, lng, pin.l[0], pin.l[1]);
         if (d <= radius) {
-          found = pin;
+          nearby = pin;
           break;
         }
       }
 
-      currentPin = found;
+      currentPin = nearby;
 
-      if (found) {
-        const status = getCaptureStatus(found);
+      if (nearby) {
+        const status = getCaptureStatus(nearby);
         updateCaptureText(
           status.fullyCaptured
-            ? `${found.n} • REPLAY`
-            : `${found.n} • ${status.completedCount}/${status.required}`
+            ? `${nearby.n} • CAPTURED • REPLAY`
+            : `${nearby.n} • ${status.completedCount}/${status.required} CAPTURED`
         );
         showActionButton(true);
       } else {
@@ -2916,14 +2737,18 @@ function startLocationWatch() {
       }
     },
     () => {},
-    { enableHighAccuracy: true }
+    {
+      enableHighAccuracy: true,
+      maximumAge: 5000,
+      timeout: 10000,
+    }
   );
 }
 
 /* ============================
-   MISSION ENTRY
+   QUEST FLOW
 ============================ */
-function openCurrentPinMission() {
+function openMissionMenu() {
   if (!currentPin) return;
 
   if (isAbbeyRouteApproachPin(currentPin)) {
@@ -2931,136 +2756,1305 @@ function openCurrentPinMission() {
     return;
   }
 
+  showQuestLayoutForPack();
+
+  if ($("q-name")) $("q-name").innerText = currentPin.n;
+
+  const status = getCaptureStatus(currentPin);
+
+  if ($("quest-status")) {
+    const requiredText = status.mustInclude.length
+      ? ` • REQUIRED: ${status.mustInclude.join(", ").toUpperCase()}`
+      : "";
+    const routeText =
+      state.activePack === "classic" && state.mapMode === "abbey"
+        ? ` • ${getAbbeyRouteStatusText()}`
+        : "";
+
+    $("quest-status").innerText =
+      state.activePack === "adult"
+        ? `STATUS: CASE MODE • ${String(
+            state.activeAdultCategory || "GENERAL"
+          ).toUpperCase()} • ${status.completedCount}/${status.required} CAPTURED${
+            status.fullyCaptured ? " • FULLY CAPTURED" : ""
+          }`
+        : `STATUS: ${state.mapMode.toUpperCase()} • ${status.completedCount}/${
+            status.required
+          } CAPTURED${requiredText}${
+            status.fullyCaptured ? " • FULLY CAPTURED" : ""
+          }${routeText}`;
+  }
+
+  if ($("mode-banner")) {
+    $("mode-banner").style.display = "block";
+
+    const label =
+      state.activePack === "adult"
+        ? "CASE BRIEFING"
+        : state.mapMode === "core"
+        ? "FULL BARROW"
+        : state.mapMode === "park"
+        ? "PARK"
+        : "ABBEY";
+
+    $("mode-banner").innerText = status.fullyCaptured
+      ? `${label}\n${currentPin.n}\nFULLY CAPTURED`
+      : `${label}\n${currentPin.n}\n${status.completedCount}/${status.required} CAPTURED`;
+  }
+
+  if ($("boss-banner")) {
+    const isBoss = currentPin.type === "boss";
+    const abbeyCoreOpen =
+      state.activePack === "classic" &&
+      state.mapMode === "abbey" &&
+      getAbbeyRebuild().unlockedCore;
+    $("boss-banner").style.display = isBoss || abbeyCoreOpen ? "block" : "none";
+    $("boss-banner").innerText = isBoss
+      ? "FINAL TRIAL ACTIVE"
+      : abbeyCoreOpen
+      ? "ABBey CORE READY"
+      : "";
+  }
+
+  let storyText = "";
+
   if (state.activePack === "adult") {
-    openAdultMission(currentPin);
+    const content = getAdultContentForPin(currentPin);
+    storyText =
+      content?.story || "Case briefing not found for this location yet.";
+  } else {
+    storyText =
+      getPinStartIntro(currentPin.id, getEffectiveTier()) ||
+      `${currentPin.n}. Mission briefing ready.`;
+
+    renderClassicModeChoices(currentPin);
+  }
+
+  if ($("q-story")) {
+    $("q-story").innerText = storyText;
+  }
+
+  speakText(storyText);
+  showModal("quest-modal");
+}
+
+function openTask(mode) {
+  if (!currentPin) return;
+
+  if (isAbbeyRouteApproachPin(currentPin)) {
+    renderAbbeyRouteChoice();
     return;
   }
 
-  openClassicMission(currentPin);
-}
+  const tier = getEffectiveTier();
+  let task = null;
 
-function openClassicMission(pin) {
+  clearTaskBlocks();
+
+  if (state.activePack === "adult") {
+    const content = getAdultContentForPin(currentPin);
+
+    const storyText =
+      content?.story ||
+      "Case briefing not found for this location yet. Add story content for this adult pin.";
+    const evidenceText = content?.evidence || "No evidence logged yet.";
+    const clueText = content?.clue || "No clue logged yet.";
+
+    if (mode === "read_case") {
+      task = {
+        title: content?.title || currentPin.event || currentPin.n,
+        desc: `Case briefing for ${currentPin.n}`,
+        story: storyText,
+        evidence: "",
+        clue: "",
+        options: [],
+        meta: { informational: true, rewardCoins: 0 },
+        speech: storyText,
+      };
+    } else if (mode === "evidence") {
+      task = {
+        title: content?.title || currentPin.event || currentPin.n,
+        desc: `Evidence log for ${currentPin.n}`,
+        story: "",
+        evidence: evidenceText,
+        clue: "",
+        options: [],
+        meta: { informational: true, rewardCoins: 0 },
+        speech: evidenceText,
+      };
+    } else if (mode === "clue") {
+      task = {
+        title: content?.title || currentPin.event || currentPin.n,
+        desc: `Clue file for ${currentPin.n}`,
+        story: "",
+        evidence: "",
+        clue: clueText,
+        options: [],
+        meta: { informational: true, rewardCoins: 0 },
+        speech: clueText,
+      };
+    } else if (mode === "ar_verify") {
+      task = {
+        title: content?.title || currentPin.event || currentPin.n,
+        desc: "Use AR verify to confirm the hotspot and compare the real place to the case notes.",
+        story: "",
+        evidence: "Hotspot verification required on site.",
+        clue: "Look for details that match the case briefing before you confirm.",
+        options: [],
+        meta: { informational: true, rewardCoins: 0 },
+        speech:
+          "Use AR verify to confirm the hotspot and compare the real place to the case notes.",
+      };
+    } else {
+      task = {
+        title: content?.title || currentPin.event || currentPin.n,
+        desc: `Case file for ${currentPin.n}`,
+        story: storyText,
+        evidence: evidenceText,
+        clue: clueText,
+        options: [],
+        meta: { informational: true, rewardCoins: 0 },
+        speech: storyText,
+      };
+    }
+  } else {
+    task = getQA({
+      pinId: currentPin.id,
+      mode,
+      tier,
+      zone: currentPin.zone || currentPin.set || state.mapMode,
+      salt: Date.now(),
+      recentQuestionIds: state.completedQuestionIds || [],
+      recentQuestionTags: state.recentQuestionTags || [],
+      adaptiveProfile: getCurrentQuizProfile(),
+    });
+  }
+
   currentTask = {
-    mode: "classic",
-    pin,
+    mode,
+    pin: currentPin,
+    question: task,
+    speedStartedAt: null,
   };
 
-  renderClassicModeChoices(pin);
+  const status = getCaptureStatus(currentPin);
+
+  if ($("task-title")) {
+    $("task-title").innerText =
+      state.activePack === "adult"
+        ? task?.title || currentPin.n
+        : `${mode.toUpperCase()} @ ${currentPin.n}`;
+  }
+
+  if ($("task-desc")) {
+    const requiredText = status.mustInclude.includes(mode)
+      ? `\n\nREQUIRED FOR FULL CAPTURE`
+      : "";
+    const doneText = isModeCompletedForPin(currentPin, mode)
+      ? `\n\nTHIS MODE ALREADY COMPLETED`
+      : "";
+    $("task-desc").innerText =
+      (task?.desc || task?.q || "No mission found for this location.") +
+      requiredText +
+      doneText;
+  }
+
+  setTaskBlock("task-block-story", "task-story", task?.story || "");
+  setTaskBlock("task-block-evidence", "task-evidence", task?.evidence || "");
+  setTaskBlock("task-block-clue", "task-clue", task?.clue || "");
+
+  renderTaskOptions(task);
+
+  if (task?.speech) {
+    speakText(task.speech);
+  } else if (task?.q) {
+    speakText(task.q);
+  } else {
+    speakText("No mission found.");
+  }
+
   showModal("task-modal");
 }
 
-function openAdultMission(pin) {
-  const content = getAdultContentForPin(pin);
+function buildManualTaskButtons(question) {
+  const wrap = $("task-options");
+  const readBtn = $("btn-read-answers");
+  if (!wrap || !currentTask) return;
 
-  if (!content) {
-    alert("No content available.");
+  wrap.innerHTML = "";
+  wrap.style.display = "grid";
+  if (readBtn) readBtn.classList.add("hidden");
+
+  const mode = currentTask.mode;
+
+  if (mode === "speed") {
+    const startBtn = document.createElement("button");
+    startBtn.className = "mcq-btn";
+    startBtn.innerText = "START SPEED TIMER";
+    startBtn.addEventListener("click", () => {
+      currentTask.speedStartedAt = Date.now();
+      if ($("task-feedback")) {
+        $("task-feedback").style.display = "block";
+        $("task-feedback").style.color = "var(--gold)";
+        $("task-feedback").innerText =
+          "Speed timer started. Finish within 20 seconds.";
+      }
+      speakText("Speed timer started.");
+    });
+
+    const completeBtn = document.createElement("button");
+    completeBtn.className = "mcq-btn";
+    completeBtn.innerText = "COMPLETE SPEED TASK";
+    completeBtn.addEventListener("click", () => completeCurrentTaskManually());
+
+    wrap.appendChild(startBtn);
+    wrap.appendChild(completeBtn);
     return;
   }
 
-  currentTask = {
-    mode: "adult",
-    pin,
-  };
+  const confirmBtn = document.createElement("button");
+  confirmBtn.className = "mcq-btn";
 
-  if ($("adult-title")) $("adult-title").innerText = content.title || pin.n;
-  if ($("adult-body")) $("adult-body").innerText = content.text || "";
+  if (mode === "activity") confirmBtn.innerText = "CONFIRM ACTIVITY COMPLETE";
+  else if (mode === "family") confirmBtn.innerText = "CONFIRM FAMILY COMPLETE";
+  else if (mode === "history") confirmBtn.innerText = "MARK HISTORY COMPLETE";
+  else confirmBtn.innerText = "CONFIRM COMPLETE";
 
-  showModal("adult-modal");
+  confirmBtn.addEventListener("click", () => completeCurrentTaskManually());
+  wrap.appendChild(confirmBtn);
+}
+
+function renderTaskOptions(question) {
+  const wrap = $("task-options");
+  const readBtn = $("btn-read-answers");
+  if (!wrap) return;
+
+  wrap.innerHTML = "";
+
+  const hasOptions = Array.isArray(question?.options) && question.options.length;
+
+  if (!hasOptions) {
+    buildManualTaskButtons(question);
+    if ($("task-feedback")) {
+      $("task-feedback").style.display = "none";
+      $("task-feedback").innerText = "";
+    }
+    return;
+  }
+
+  wrap.style.display = "grid";
+
+  question.options.forEach((option, index) => {
+    const btn = document.createElement("button");
+    btn.className = "mcq-btn";
+    btn.innerText = option;
+    btn.addEventListener("click", () => answerMission(index));
+    wrap.appendChild(btn);
+  });
+
+  if (readBtn) {
+    readBtn.classList.remove("hidden");
+  }
+
+  if ($("task-feedback")) {
+    $("task-feedback").style.display = "none";
+    $("task-feedback").innerText = "";
+  }
+}
+
+/* ============================
+   MYSTERIES
+============================ */
+function hasUnlockedMystery(id) {
+  return state.unlockedMysteries.includes(Number(id));
+}
+
+function unlockMystery(id) {
+  const num = Number(id);
+  if (!Number.isFinite(num)) return;
+  if (!hasUnlockedMystery(num)) {
+    state.unlockedMysteries.push(num);
+    saveState();
+  }
+}
+
+function maybeUnlockMystery() {
+  const chance = 0.35;
+  if (Math.random() > chance) return null;
+
+  const mystery = getRandomMystery(state.unlockedMysteries);
+  if (!mystery) return null;
+
+  unlockMystery(mystery.id);
+  return mystery;
 }
 
 /* ============================
    SHOP
 ============================ */
-function getInventoryCount(id) {
-  return Number(state.inventory?.[id] || 0);
+function getInventoryCount(itemId) {
+  return Number(state.inventory?.[itemId] || 0);
 }
 
-function addToInventory(id, amount = 1) {
-  if (!state.inventory[id]) state.inventory[id] = 0;
-  state.inventory[id] += amount;
+function markPurchased(itemId) {
+  if (!state.purchasedItems.includes(itemId)) {
+    state.purchasedItems.push(itemId);
+  }
+}
+
+function addInventory(itemId, qty = 1) {
+  state.inventory[itemId] = getInventoryCount(itemId) + qty;
+  markPurchased(itemId);
 }
 
 function renderShop() {
-  const wrap = $("shop-list");
-  if (!wrap) return;
+  const summary = $("shop-summary");
+  const list = $("shop-list");
+  const inventory = $("shop-inventory");
+  const active = getActivePlayer();
 
-  wrap.innerHTML = SHOP_ITEMS.map(
-    (item) => `
-    <div class="shop-item">
-      <div>${item.name}</div>
-      <div>${item.cost} tokens</div>
-      <button data-id="${item.id}">BUY</button>
+  if (!summary || !list || !inventory) return;
+
+  const coins = active?.coins || 0;
+  const xp = Number(state.meta?.xp || 0);
+  const level = getLevelFromXP(xp);
+  const levelProgress = getLevelProgress(xp);
+  const badges = Array.isArray(state.meta?.badges) ? state.meta.badges : [];
+  const abbey = getAbbeyRebuild();
+
+  summary.innerHTML = `
+    <div style="padding:10px;border:1px solid #333;border-radius:12px;background:#111;">
+      <strong>${active?.name || "Player"}</strong><br>
+      Coins: ${coins} 🪙<br>
+      XP: ${xp} (Level ${level})<br>
+      Level Progress: ${levelProgress}/100<br>
+      Badges: ${badges.length}<br>
+      Abbey Rebuild: ${abbey.points}
     </div>
-  `
-  ).join("");
+  `;
 
-  wrap.querySelectorAll("button").forEach((btn) => {
+  const ownedItems = SHOP_ITEMS.filter((item) => getInventoryCount(item.id) > 0);
+
+  const badgeBlock = badges.length
+    ? `
+      <div style="margin-top:10px;">
+        ${badges
+          .map(
+            (badge) => `
+          <div style="border:1px solid #333;border-radius:14px;padding:12px;background:#111;margin-bottom:10px;">
+            <div style="font-weight:bold;">${badge.icon} ${badge.name}</div>
+            <div style="font-size:12px;opacity:.82;margin-top:6px;">${
+              badge.captures ? `${badge.captures} node${badge.captures === 1 ? "" : "s"}` : "special unlock"
+            }</div>
+          </div>
+        `
+          )
+          .join("")}
+      </div>
+    `
+    : "";
+
+  inventory.innerHTML =
+    (ownedItems.length
+      ? ownedItems
+          .map(
+            (item) => `
+        <div style="border:1px solid #333;border-radius:14px;padding:12px;background:#111;margin-bottom:10px;">
+          <div style="font-weight:bold;">${item.name}</div>
+          <div style="font-size:12px;opacity:.82;margin-top:6px;">Owned: ${getInventoryCount(
+            item.id
+          )}</div>
+        </div>
+      `
+          )
+          .join("")
+      : `<div style="opacity:.8;">No purchases yet.</div>`) + badgeBlock;
+
+  list.innerHTML = SHOP_ITEMS.map((item) => {
+    const owned = getInventoryCount(item.id);
+    return `
+      <div class="shop-item">
+        <div class="shop-item-top">
+          <div>
+            <div style="font-weight:bold;">${item.name}</div>
+            <div style="font-size:12px;opacity:.85;margin-top:6px;">${item.desc}</div>
+          </div>
+          <div class="shop-cost">${item.cost} 🪙</div>
+        </div>
+        ${owned > 0 ? `<div class="owned-tag">OWNED: ${owned}</div>` : ""}
+        <button class="win-btn shop-buy-btn" data-shop-id="${item.id}" style="margin-top:12px;">
+          BUY
+        </button>
+      </div>
+    `;
+  }).join("");
+
+  document.querySelectorAll(".shop-buy-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
-      buyItem(btn.dataset.id);
+      const itemId = btn.dataset.shopId;
+      buyShopItem(itemId);
     });
   });
 }
 
-function buyItem(id) {
-  const item = SHOP_ITEMS.find((i) => i.id === id);
-  if (!item) return;
+function buyShopItem(itemId) {
+  const item = SHOP_ITEMS.find((x) => x.id === itemId);
+  const active = getActivePlayer();
+  if (!item || !active) return;
 
-  if ((state.meta.tokens || 0) < item.cost) {
-    alert("Not enough tokens.");
+  if ((active.coins || 0) < item.cost) {
+    speakText("Not enough coins.");
+    alert("Not enough coins.");
     return;
   }
 
-  state.meta.tokens -= item.cost;
-  addToInventory(id, 1);
-
+  updateCoins(active.id, -item.cost);
+  addInventory(item.id, 1);
   saveState();
-  renderShop();
   renderHUD();
+  renderShop();
+  refreshAllPinMarkers();
+
+  speakText(`${item.name} purchased.`);
+  alert(`${item.name} purchased and added to inventory.`);
 }
 
 /* ============================
-   UI / RENDER
+   ANSWERS / REWARDS
 ============================ */
-function renderHomeLog() {
-  const el = $("home-log");
-  if (!el) return;
-
-  const progress = getCurrentModeProgress();
-
-  el.innerText = `Progress: ${progress.completed}/${progress.total}`;
+function rememberQuestion(questionId) {
+  if (!questionId) return;
+  if (!state.completedQuestionIds.includes(questionId)) {
+    state.completedQuestionIds.push(questionId);
+    if (state.completedQuestionIds.length > 300) {
+      state.completedQuestionIds = state.completedQuestionIds.slice(-300);
+    }
+  }
 }
 
+function speakRewardSequence({
+  factText,
+  rewardCoins,
+  rewardXp,
+  newLevel,
+  oldLevel,
+  fullCaptureJustUnlocked,
+}) {
+  const mode = getRewardPresentationMode();
+  const levelUpText =
+    newLevel > oldLevel ? ` You reached level ${newLevel}.` : "";
+  const captureText = fullCaptureJustUnlocked
+    ? " Node fully captured."
+    : " Progress saved.";
+
+  if (mode === "kid") {
+    const line = `${factText}. You earned ${rewardCoins} coins and ${rewardXp} XP.${captureText}${levelUpText}`;
+    speakText(line);
+    return 1200;
+  }
+
+  if (mode === "teen") {
+    const intro = `Correct. You earned ${rewardCoins} coins and ${rewardXp} XP.`;
+    const fact = factText ? ` ${factText}.` : "";
+    const level = levelUpText ? ` ${levelUpText.trim()}` : "";
+    speakText(`${intro}${fact}${captureText}${level}`);
+    return 1100;
+  }
+
+  const adultLine = `${factText}.${captureText}${levelUpText} You earned ${rewardCoins} coins and ${rewardXp} XP.`;
+  speakText(adultLine);
+  return 1500;
+}
+
+function applyMissionOutcome({
+  isCorrect = true,
+  manual = false,
+}) {
+  if (!currentTask) return;
+
+  const q = currentTask.question || {};
+  const feedback = $("task-feedback");
+  const pin = currentTask.pin;
+  const mode = currentTask.mode;
+
+  if (!pin || !feedback) return;
+
+  const wasAlreadyDone = isModeCompletedForPin(pin, mode);
+  const missionReward = getMissionReward({
+    mode,
+    isNewMode: !wasAlreadyDone,
+  });
+
+  const questionId = q?.meta?.questionId || q?.id || null;
+  const active = getActivePlayer();
+
+  if (active && missionReward.coins) {
+    updateCoins(active.id, missionReward.coins);
+  }
+
+  const oldLevel = getLevelFromXP(Number(state.meta.xp || 0));
+  state.meta.xp = Number(state.meta.xp || 0) + Number(missionReward.xp || 0);
+  state.meta.tokens =
+    Number(state.meta.tokens || 0) + Number(missionReward.tokens || 0);
+
+  const missionRecord = recordMissionCompletion(
+    pin,
+    mode,
+    missionReward,
+    questionId
+  );
+
+  let rewardCoins = Number(missionReward.coins || 0);
+  let rewardXp = Number(missionReward.xp || 0);
+  let rewardTokens = Number(missionReward.tokens || 0);
+
+  if (missionRecord.fullCaptureJustUnlocked) {
+    const bonus = getFullCaptureBonus(pin);
+    rewardCoins += Number(bonus.coins || 0);
+    rewardXp += Number(bonus.xp || 0);
+    rewardTokens += Number(bonus.tokens || 0);
+
+    if (active && bonus.coins) {
+      updateCoins(active.id, bonus.coins);
+    }
+
+    state.meta.xp = Number(state.meta.xp || 0) + Number(bonus.xp || 0);
+    state.meta.tokens =
+      Number(state.meta.tokens || 0) + Number(bonus.tokens || 0);
+  }
+
+  const newLevel = getLevelFromXP(Number(state.meta.xp || 0));
+
+  rememberQuestion(questionId);
+  rememberQuestionTags(q?.meta?.tags || []);
+
+  if (mode === "quiz") {
+    const tier = getEffectiveTier();
+    const currentProfile =
+      state.quizProfiles?.[tier] || getDefaultAdaptiveProfile(tier);
+
+    state.quizProfiles[tier] = updateAdaptiveProfile(currentProfile, {
+      tier,
+      isCorrect,
+      difficulty: q?.meta?.difficulty,
+      tags: q?.meta?.tags || [],
+      questionId,
+    });
+  }
+
+  const mystery = missionRecord.fullCaptureJustUnlocked ? maybeUnlockMystery() : null;
+
+  checkBadgeUnlocksByCaptures();
+
+  saveState();
+  renderHUD();
+  renderShop();
+  renderHomeLog();
+  refreshPinMarker(pin);
+  renderClassicModeChoices(pin);
+
+  const status = getCaptureStatus(pin);
+  const factText = q.fact || q.desc || "Mission complete.";
+
+  feedback.style.display = "block";
+  feedback.style.color = "var(--neon)";
+
+  const lines = [];
+  lines.push(wasAlreadyDone ? "MODE REPLAY COMPLETE" : "MODE COMPLETE");
+  lines.push(`${status.completedCount}/${status.required} CAPTURED`);
+
+  if (status.missingRequired.length) {
+    lines.push(`Still required: ${status.missingRequired.join(", ")}`);
+  }
+
+  lines.push("");
+  lines.push(factText);
+  lines.push("");
+  lines.push(`+${rewardCoins} coins`);
+  lines.push(`+${rewardXp} XP`);
+  if (rewardTokens) lines.push(`+${rewardTokens} tokens`);
+
+  if (missionRecord.fullCaptureJustUnlocked) {
+    lines.push("");
+    lines.push("FULL NODE CAPTURE COMPLETE");
+  }
+
+  if (mystery) {
+    lines.push("");
+    lines.push(`BONUS MYSTERY UNLOCKED`);
+    lines.push(`${mystery.icon || "❓"} ${mystery.title}`);
+  }
+
+  feedback.innerText = lines.join("\n");
+
+  const imageDelay = speakRewardSequence({
+    factText,
+    rewardCoins,
+    rewardXp,
+    newLevel,
+    oldLevel,
+    fullCaptureJustUnlocked: missionRecord.fullCaptureJustUnlocked,
+  });
+
+  if (missionRecord.fullCaptureJustUnlocked) {
+    setTimeout(() => {
+      showRewardImage(pin, factText);
+    }, imageDelay);
+  }
+}
+
+function answerMission(index) {
+  if (!currentTask) return;
+
+  const q = currentTask.question;
+  const feedback = $("task-feedback");
+  if (!feedback) return;
+
+  if (!Array.isArray(q?.options) || typeof q.answer !== "number") {
+    feedback.style.display = "none";
+    return;
+  }
+
+  const correct = index === q.answer;
+  feedback.style.display = "block";
+
+  if (!correct) {
+    const correctAnswer =
+      Array.isArray(q.options) && q.options[q.answer] != null
+        ? q.options[q.answer]
+        : "Unknown";
+
+    feedback.style.color = "#ff6b6b";
+    feedback.innerText = `Wrong answer.\nCorrect answer: ${correctAnswer}`;
+    speakText(`Wrong answer. The correct answer is ${correctAnswer}.`);
+
+    if (currentTask.mode === "quiz") {
+      const tier = getEffectiveTier();
+      const currentProfile =
+        state.quizProfiles?.[tier] || getDefaultAdaptiveProfile(tier);
+
+      state.quizProfiles[tier] = updateAdaptiveProfile(currentProfile, {
+        tier,
+        isCorrect: false,
+        difficulty: q?.meta?.difficulty,
+        tags: q?.meta?.tags || [],
+        questionId: q?.meta?.questionId || q?.id || null,
+      });
+
+      rememberQuestionTags(q?.meta?.tags || []);
+      saveState();
+    }
+
+    return;
+  }
+
+  applyMissionOutcome({ isCorrect: true });
+}
+
+function completeCurrentTaskManually() {
+  if (!currentTask) return;
+
+  const feedback = $("task-feedback");
+  if (!feedback) return;
+
+  if (currentTask.mode === "speed") {
+    if (!currentTask.speedStartedAt) {
+      feedback.style.display = "block";
+      feedback.style.color = "#ff6b6b";
+      feedback.innerText = "Start the speed timer first.";
+      speakText("Start the speed timer first.");
+      return;
+    }
+
+    const elapsed = Date.now() - currentTask.speedStartedAt;
+    if (elapsed > 20000) {
+      feedback.style.display = "block";
+      feedback.style.color = "#ff6b6b";
+      feedback.innerText = "Speed task failed. Time ran out.";
+      speakText("Speed task failed. Time ran out.");
+      return;
+    }
+  }
+
+  applyMissionOutcome({ isCorrect: true, manual: true });
+}
+
+/* ============================
+   SETTINGS / HOME
+============================ */
+function applySettingsToUI() {
+  if ($("radius-label")) $("radius-label").innerText = state.settings.radius;
+  if ($("pitch-label")) $("pitch-label").innerText = state.settings.voicePitch;
+  if ($("rate-label")) $("rate-label").innerText = state.settings.voiceRate;
+  if ($("sfx-label")) $("sfx-label").innerText = state.settings.sfxVol;
+  if ($("zoomui-label"))
+    $("zoomui-label").innerText = state.settings.zoomUI ? "ON" : "OFF";
+
+  if ($("enter-radius")) $("enter-radius").value = state.settings.radius;
+  if ($("v-pitch")) $("v-pitch").value = state.settings.voicePitch;
+  if ($("v-rate")) $("v-rate").value = state.settings.voiceRate;
+  if ($("sfx-vol")) $("sfx-vol").value = state.settings.sfxVol;
+  if ($("char-select")) $("char-select").value = state.settings.character;
+  if ($("tier-mode")) $("tier-mode").value = state.tierMode || "kid";
+}
+
+function renderHomeLog() {
+  const summary = $("home-summary");
+  const list = $("home-list");
+  if (!summary || !list) return;
+
+  const pins = getCurrentPins();
+  const mysteryCount = state.unlockedMysteries?.length || 0;
+  const completedCount = state.completedQuestionIds?.length || 0;
+  const currentProgress = getCurrentModeProgress();
+  const xp = Number(state.meta?.xp || 0);
+  const level = getLevelFromXP(xp);
+  const levelProgress = getLevelProgress(xp);
+  const tier = getEffectiveTier();
+  const quizProfile = getCurrentQuizProfile();
+  const badges = Array.isArray(state.meta?.badges) ? state.meta.badges : [];
+  const lock = getAdultLock();
+  const abbey = getAbbeyRebuild();
+  const route = state.route;
+  const noteCount = Array.isArray(state.captainNotes) ? state.captainNotes.length : 0;
+
+  summary.innerHTML = `
+    <div style="padding:12px;border:1px solid #444;border-radius:14px;background:#111;line-height:1.6;">
+      <div><strong>LEVEL:</strong> ${level}</div>
+      <div><strong>XP:</strong> ${xp} (${levelProgress}/100 to next level)</div>
+      <div><strong>BADGES:</strong> ${badges.length}</div>
+      <div><strong>FULL NODES CAPTURED:</strong> ${Number(
+        state.pinStats?.totalFirstCompletions || 0
+      )}</div>
+      <div><strong>PACK:</strong> ${state.activePack}</div>
+      <div><strong>MODE:</strong> ${state.mapMode}</div>
+      <div><strong>TIER:</strong> ${tier}</div>
+      <div><strong>ADULT LOCK:</strong> ${
+        lock.unlocked ? "UNLOCKED" : "LOCKED"
+      }</div>
+      <div><strong>QUIZ RATING:</strong> ${Number(quizProfile.rating || 0)}</div>
+      <div><strong>QUIZ STREAK:</strong> ${Number(quizProfile.streak || 0)}</div>
+      <div><strong>QUIZ CONFIDENCE:</strong> ${Math.round(
+        Number(quizProfile.confidence || 0) * 100
+      )}%</div>
+      <div><strong>PINS LOADED:</strong> ${pins.length}</div>
+      <div><strong>MODE FULLY CAPTURED:</strong> ${currentProgress.completed}/${currentProgress.total} (${currentProgress.percent}%)</div>
+      <div><strong>MODE REMAINING:</strong> ${currentProgress.remaining}</div>
+      <div><strong>MYSTERIES UNLOCKED:</strong> ${mysteryCount}</div>
+      <div><strong>COMPLETED PROMPTS TRACKED:</strong> ${completedCount}</div>
+      <div><strong>CAPTAIN NOTES:</strong> ${noteCount}</div>
+      <div><strong>ABBey REBUILD:</strong> ${abbey.points} (Stage ${abbey.stage})</div>
+      <div><strong>ABBey ROUTES COMPLETE:</strong> ${
+        abbey.completedRoutes.length ? abbey.completedRoutes.join(", ") : "none"
+      }</div>
+      <div><strong>ACTIVE ROUTE:</strong> ${
+        route?.path ? `${route.path} step ${Number(route.step || 0) + 1}` : "none"
+      }</div>
+    </div>
+  `;
+
+  const mysteryBlock = mysteryCount
+    ? `
+      <div style="padding:10px;border:1px solid #444;border-radius:12px;margin:8px 0 14px;background:#161616;">
+        <div style="font-weight:bold;color:var(--gold);">UNLOCKED MYSTERIES</div>
+        <div style="margin-top:6px;font-size:13px;opacity:.9;">
+          ${state.unlockedMysteries.map((id) => `#${id}`).join(", ")}
+        </div>
+      </div>
+    `
+    : `
+      <div style="padding:10px;border:1px solid #333;border-radius:12px;margin:8px 0 14px;background:#111;">
+        <div style="font-weight:bold;color:var(--gold);">UNLOCKED MYSTERIES</div>
+        <div style="margin-top:6px;font-size:13px;opacity:.85;">None yet.</div>
+      </div>
+    `;
+
+  const badgeBlock = badges.length
+    ? `
+      <div style="padding:10px;border:1px solid #444;border-radius:12px;margin:8px 0 14px;background:#161616;">
+        <div style="font-weight:bold;color:var(--gold);">NODE BADGES</div>
+        <div style="margin-top:8px;font-size:13px;line-height:1.6;">
+          ${badges
+            .map(
+              (b) =>
+                `${b.icon} ${b.name} ${
+                  b.captures ? `(${b.captures} node${b.captures === 1 ? "" : "s"})` : ""
+                }`
+            )
+            .join("<br>")}
+        </div>
+      </div>
+    `
+    : "";
+
+  const clueBlock =
+    route?.clues?.length
+      ? `
+    <div style="padding:10px;border:1px solid #444;border-radius:12px;margin:8px 0 14px;background:#161616;">
+      <div style="font-weight:bold;color:var(--gold);">ACTIVE ROUTE CLUES</div>
+      <div style="margin-top:8px;font-size:13px;line-height:1.6;">
+        ${route.clues
+          .map((c) => `${c.value} — ${c.saveLabel || c.title || "clue"}`)
+          .join("<br>")}
+      </div>
+    </div>
+  `
+      : "";
+
+  list.innerHTML =
+    mysteryBlock +
+    badgeBlock +
+    clueBlock +
+    pins
+      .slice(0, 50)
+      .map((pin) => {
+        const status = getCaptureStatus(pin);
+        return `
+        <div style="padding:10px;border:1px solid #333;border-radius:12px;margin:8px 0;background:${
+          status.fullyCaptured ? "rgba(77,255,158,0.08)" : "#111"
+        };">
+          <div style="font-weight:bold;">${
+            status.fullyCaptured ? "✅ " : ""
+          }${pin.n}</div>
+          <div style="opacity:.85;font-size:12px;">${
+            pin.zone || pin.set || pin.category || "unknown"
+          }</div>
+          <div style="margin-top:6px;font-size:12px;opacity:.82;">
+            ${status.completedCount}/${status.required} captured${
+              status.mustInclude.length
+                ? ` • required: ${status.mustInclude.join(", ")}`
+                : ""
+            }
+          </div>
+        </div>
+      `;
+      })
+      .join("");
+}
+
+function updateStartButtons() {
+  $("pill-full")?.classList.toggle(
+    "active",
+    state.activePack === "classic" && state.mapMode === "core"
+  );
+  $("pill-park")?.classList.toggle(
+    "active",
+    state.activePack === "classic" && state.mapMode === "park"
+  );
+  $("pill-docks")?.classList.toggle(
+    "active",
+    state.activePack === "classic" && state.mapMode === "abbey"
+  );
+
+  $("pill-kids")?.classList.toggle("active", state.tierMode === "kid");
+  $("pill-teen")?.classList.toggle("active", state.tierMode === "teen");
+
+  $("pill-truecrime")?.classList.toggle(
+    "active",
+    state.activePack === "adult" && state.activeAdultCategory === "true_crime"
+  );
+  $("pill-conspiracy")?.classList.toggle(
+    "active",
+    state.activePack === "adult" && state.activeAdultCategory === "conspiracy"
+  );
+  $("pill-history")?.classList.toggle(
+    "active",
+    state.activePack === "adult" && state.activeAdultCategory === "history"
+  );
+}
+
+/* ============================
+   AR
+============================ */
+async function openAR() {
+  showModal("ar-modal");
+
+  if ($("ar-readout")) {
+    $("ar-readout").innerText = currentPin
+      ? `Scanning around ${currentPin.n}`
+      : "Scanning...";
+  }
+
+  const video = $("ar-video");
+  if (!video || !navigator.mediaDevices?.getUserMedia) return;
+
+  try {
+    arStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment" },
+      audio: false,
+    });
+    video.srcObject = arStream;
+  } catch (err) {
+    console.warn("AR camera failed:", err);
+    if ($("ar-readout")) $("ar-readout").innerText = "Camera access failed.";
+  }
+}
+
+function stopAR() {
+  const video = $("ar-video");
+  if (video && video.srcObject) {
+    const tracks = video.srcObject.getTracks();
+    tracks.forEach((track) => track.stop());
+    video.srcObject = null;
+  }
+  arStream = null;
+}
+
+/* ============================
+   RENDER ALL / FULL REFRESH
+============================ */
 function renderEverything() {
   renderHUD();
-  renderPins();
+  applySettingsToUI();
+  updateStartButtons();
+  refreshAdultLockUI();
+  showQuestLayoutForPack();
+  renderHomeLog();
   renderShop();
   renderCaptainNotes();
-  renderHomeLog();
-  refreshAdultLockUI();
+
+  if (map) {
+    refreshAllPinMarkers();
+  }
 }
 
 /* ============================
    BUTTONS
 ============================ */
 function wireButtons() {
-  $("action-trigger")?.addEventListener("click", openCurrentPinMission);
+  $("btn-start")?.addEventListener("click", () => closeModal("start-modal"));
+  $("btn-start-close")?.addEventListener("click", () =>
+    closeModal("start-modal")
+  );
+  $("btn-start-close-x")?.addEventListener("click", () =>
+    closeModal("start-modal")
+  );
 
-  $("btn-reset-map")?.addEventListener("click", resetCurrentMapProgress);
+  $("btn-home")?.addEventListener("click", () => {
+    currentPin = null;
+    currentTask = null;
 
-  $("btn-export-save")?.addEventListener("click", exportSaveFile);
+    const actionBtn = $("action-trigger");
+    if (actionBtn) actionBtn.style.display = "none";
 
-  $("btn-import-save")?.addEventListener("change", (e) => {
-    const file = e.target.files?.[0];
-    if (file) importSaveFileFromInput(file);
+    state.activePack = "classic";
+    state.activeAdultCategory = null;
+    state.mapMode = "core";
+    clearAdultSessionApproval();
+    clearActiveRoute();
+
+    saveState();
+    updateStartButtons();
+    refreshAdultLockUI();
+    resetMap();
+    showModal("start-modal");
+  });
+
+  $("btn-shop")?.addEventListener("click", () => {
+    renderShop();
+    showModal("shop-modal");
+    speakText("Shop opened.");
+  });
+
+  $("btn-shop-close")?.addEventListener("click", () =>
+    closeModal("shop-modal")
+  );
+  $("btn-shop-close-x")?.addEventListener("click", () =>
+    closeModal("shop-modal")
+  );
+
+  $("btn-home-close")?.addEventListener("click", () =>
+    closeModal("home-modal")
+  );
+  $("btn-home-close-x")?.addEventListener("click", () =>
+    closeModal("home-modal")
+  );
+
+  $("btn-settings")?.addEventListener("click", () => {
+    showModal("settings-modal");
+    speakText("System config opened.");
+  });
+
+  $("btn-open-settings")?.addEventListener("click", () => {
+    showModal("settings-modal");
+    speakText("System config opened.");
+  });
+
+  $("btn-close-settings")?.addEventListener("click", () =>
+    closeModal("settings-modal")
+  );
+  $("btn-close-settings-x")?.addEventListener("click", () =>
+    closeModal("settings-modal")
+  );
+
+  $("btn-commander")?.addEventListener("click", () => {
+    renderHomeLog();
+    renderCaptainNotes();
+    showModal("commander-hub");
+    speakText("Commander hub opened.");
+  });
+
+  $("btn-close-commander")?.addEventListener("click", () =>
+    closeModal("commander-hub")
+  );
+  $("btn-close-commander-x")?.addEventListener("click", () =>
+    closeModal("commander-hub")
+  );
+
+  $("btn-send-broadcast")?.addEventListener("click", sendBroadcastMessage);
+  $("btn-save-captain-note")?.addEventListener("click", handleSaveCaptainNote);
+
+  $("btn-close-quest")?.addEventListener("click", () =>
+    closeModal("quest-modal")
+  );
+  $("btn-task-close")?.addEventListener("click", () =>
+    closeModal("task-modal")
+  );
+
+  $("btn-read-answers")?.addEventListener("click", () => {
+    if (currentTask?.question?.options?.length) {
+      speakOptions(currentTask.question.options);
+    }
+  });
+
+  $("btn-reward-image-close")?.addEventListener("click", closeRewardImageModal);
+  $("btn-reward-image-close-x")?.addEventListener(
+    "click",
+    closeRewardImageModal
+  );
+
+  $("action-trigger")?.addEventListener("click", openMissionMenu);
+
+  $("pill-full")?.addEventListener("click", () => {
+    state.activePack = "classic";
+    state.mapMode = "core";
+    state.activeAdultCategory = null;
+    clearActiveRoute();
+    saveState();
+    updateStartButtons();
+    refreshAdultLockUI();
+    resetMap();
+    speakText("Full Barrow selected.");
+  });
+
+  $("pill-park")?.addEventListener("click", () => {
+    state.activePack = "classic";
+    state.mapMode = "park";
+    state.activeAdultCategory = null;
+    clearActiveRoute();
+    saveState();
+    updateStartButtons();
+    refreshAdultLockUI();
+    resetMap();
+    speakText("Park selected.");
+  });
+
+  $("pill-docks")?.addEventListener("click", () => {
+    state.activePack = "classic";
+    state.mapMode = "abbey";
+    state.activeAdultCategory = null;
+    clearActiveRoute();
+    saveState();
+    updateStartButtons();
+    refreshAdultLockUI();
+    resetMap();
+    speakText("Abbey selected.");
+  });
+
+  $("pill-truecrime")?.addEventListener("click", () => {
+    openAdultCategory("true_crime", "True crime");
+  });
+
+  $("pill-conspiracy")?.addEventListener("click", () => {
+    openAdultCategory("conspiracy", "Conspiracy");
+  });
+
+  $("pill-history")?.addEventListener("click", () => {
+    openAdultCategory("history", "History");
+  });
+
+  $("pill-kids")?.addEventListener("click", () => {
+    state.tierMode = "kid";
+    state.activePack = "classic";
+    state.activeAdultCategory = null;
+    clearAdultSessionApproval();
+    saveState();
+    updateStartButtons();
+    refreshAdultLockUI();
+    speakText("Kids mode selected.");
+  });
+
+  $("pill-teen")?.addEventListener("click", () => {
+    state.tierMode = "teen";
+    saveState();
+    updateStartButtons();
+    refreshAdultLockUI();
+    speakText("Teen mode selected.");
+  });
+
+  $("tier-mode")?.addEventListener("change", (e) => {
+    state.tierMode = e.target.value;
+    if (state.tierMode === "kid") {
+      clearAdultSessionApproval();
+      if (state.activePack === "adult") {
+        state.activePack = "classic";
+        state.activeAdultCategory = null;
+        resetMap();
+      }
+    }
+    saveState();
+    refreshAdultLockUI();
+  });
+
+  document.querySelectorAll(".m-tile").forEach((tile) => {
+    tile.addEventListener("click", () => {
+      const mode = tile.dataset.mode;
+      if (!mode || mode === "battle") return;
+      closeModal("quest-modal");
+      openTask(mode);
+    });
+  });
+
+  $("adult-read-case")?.addEventListener("click", () => {
+    closeModal("quest-modal");
+    openTask("read_case");
+  });
+
+  $("adult-view-evidence")?.addEventListener("click", () => {
+    closeModal("quest-modal");
+    openTask("evidence");
+  });
+
+  $("adult-view-clue")?.addEventListener("click", () => {
+    closeModal("quest-modal");
+    openTask("clue");
+  });
+
+  $("adult-ar-verify")?.addEventListener("click", () => {
+    closeModal("quest-modal");
+    openTask("ar_verify");
+  });
+
+  $("btn-player-1")?.addEventListener("click", () => setPlayerCount(1));
+  $("btn-player-2")?.addEventListener("click", () => setPlayerCount(2));
+  $("btn-player-3")?.addEventListener("click", () => setPlayerCount(3));
+  $("btn-player-4")?.addEventListener("click", () => setPlayerCount(4));
+
+  $("btn-hp-k")?.addEventListener("click", () => {
+    const p = getEnabledPlayers()[0];
+    if (p) setActivePlayer(p.id);
+  });
+
+  $("btn-hp-p")?.addEventListener("click", () => {
+    const p = getEnabledPlayers()[1] || getEnabledPlayers()[0];
+    if (p) setActivePlayer(p.id);
+  });
+
+  $("btn-swap")?.addEventListener("click", () => {
+    const enabled = getEnabledPlayers();
+    if (enabled.length >= 2) {
+      const tmp = enabled[0].name;
+      enabled[0].name = enabled[1].name;
+      enabled[1].name = tmp;
+      saveState();
+      renderHUD();
+      renderShop();
+      speakText("Players swapped.");
+    }
+  });
+
+  $("btn-night")?.addEventListener("click", () => {
+    nightVisionOn = !nightVisionOn;
+    $("map")?.classList.toggle("night-vision", nightVisionOn);
+    speakText(nightVisionOn ? "Night vision on." : "Night vision off.");
+  });
+
+  $("btn-zoom-ui")?.addEventListener("click", () => {
+    state.settings.zoomUI = !state.settings.zoomUI;
+    saveState();
+    applySettingsToUI();
+    resetMap();
+    speakText(state.settings.zoomUI ? "Zoom buttons on." : "Zoom buttons off.");
+  });
+
+  $("btn-test")?.addEventListener("click", () => {
+    alert("Systems are responding.");
+    speakText("Systems are responding.");
+  });
+
+  $("enter-radius")?.addEventListener("input", (e) => {
+    state.settings.radius = Number(e.target.value);
+    saveState();
+    applySettingsToUI();
+  });
+
+  $("v-pitch")?.addEventListener("input", (e) => {
+    state.settings.voicePitch = Number(e.target.value);
+    saveState();
+    applySettingsToUI();
+    speakText(`Voice pitch ${state.settings.voicePitch}`);
+  });
+
+  $("v-rate")?.addEventListener("input", (e) => {
+    state.settings.voiceRate = Number(e.target.value);
+    saveState();
+    applySettingsToUI();
+    speakText(`Voice rate ${state.settings.voiceRate}`);
+  });
+
+  $("sfx-vol")?.addEventListener("input", (e) => {
+    state.settings.sfxVol = Number(e.target.value);
+    saveState();
+    applySettingsToUI();
+  });
+
+  $("char-select")?.addEventListener("change", (e) => {
+    state.settings.character = e.target.value;
+    saveState();
+    resetMap();
+    applySettingsToUI();
+    speakText(`Character changed to ${e.target.value}`);
+  });
+
+  $("btn-ar-open")?.addEventListener("click", openAR);
+  $("btn-ar-stop")?.addEventListener("click", stopAR);
+  $("btn-ar-close")?.addEventListener("click", () => {
+    stopAR();
+    closeModal("ar-modal");
+  });
+  $("btn-ar-manual")?.addEventListener("click", () => {
+    stopAR();
+    closeModal("ar-modal");
+    speakText("Hotspot verified.");
+    alert("Hotspot verified.");
+  });
+
+  window.addEventListener("beforeunload", () => {
+    saveStateNow(true);
   });
 }
 
 /* ============================
    BOOT
 ============================ */
-window.addEventListener("load", () => {
-  loadVoices();
-  initMap();
-  renderEverything();
-  wireButtons();
-});
+function boot() {
+  try {
+    renderEverything();
+    wireButtons();
+
+    loadVoices();
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+
+    initMap();
+    checkBadgeUnlocksByCaptures();
+    saveStateNow(true);
+
+    console.log("App loaded");
+  } catch (err) {
+    console.error("BOOT ERROR:", err);
+  }
+}
+
+window.addEventListener("DOMContentLoaded", boot);
