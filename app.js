@@ -13,8 +13,163 @@ import { getRandomMystery } from "./mysteries.js";
 
 const $ = (id) => document.getElementById(id);
 
-const SAVE_KEY = "bq_world_v19_abbey_routes";
+/* ============================
+   STORAGE SYSTEM
+============================ */
+const SAVE_VERSION = 3;
+const SAVE_KEY = "bq_world_v20_phase3s";
+const BACKUP_KEY = "bq_world_v20_phase3s_backup";
+const EXPORT_FILENAME = "barrow-quest-save.json";
 
+let autosaveTimer = null;
+let lastSaveHash = "";
+
+function stableStringify(value) {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "";
+  }
+}
+
+function queueSaveState(delay = 160) {
+  if (autosaveTimer) clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => {
+    saveStateNow();
+  }, delay);
+}
+
+function computeStorageHealth() {
+  return {
+    version: SAVE_VERSION,
+    savedAt: new Date().toISOString(),
+    app: "Barrow Quest",
+    saveKey: SAVE_KEY,
+  };
+}
+
+function createBackupSnapshot(payload) {
+  try {
+    localStorage.setItem(BACKUP_KEY, JSON.stringify(payload));
+  } catch (err) {
+    console.warn("Backup snapshot failed:", err);
+  }
+}
+
+function saveStateNow(force = false) {
+  try {
+    const payload = buildSavePayload();
+    const raw = stableStringify(payload);
+    if (!raw) return false;
+
+    if (!force && raw === lastSaveHash) return true;
+
+    localStorage.setItem(SAVE_KEY, raw);
+    createBackupSnapshot(payload);
+    lastSaveHash = raw;
+    return true;
+  } catch (err) {
+    console.error("SAVE ERROR:", err);
+    return false;
+  }
+}
+
+function exportSaveFile() {
+  try {
+    const payload = buildSavePayload();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = EXPORT_FILENAME;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    return true;
+  } catch (err) {
+    console.error("EXPORT SAVE FAILED:", err);
+    return false;
+  }
+}
+
+async function importSaveFileFromInput(file) {
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const migrated = migrateSave(parsed);
+    state = normaliseLoadedState(migrated);
+    saveStateNow(true);
+    renderEverything();
+    return true;
+  } catch (err) {
+    console.error("IMPORT SAVE FAILED:", err);
+    return false;
+  }
+}
+
+function resetAllProgress() {
+  try {
+    localStorage.removeItem(SAVE_KEY);
+    state = structuredClone(DEFAULT_STATE);
+    saveStateNow(true);
+    renderEverything();
+    return true;
+  } catch (err) {
+    console.error("RESET FAILED:", err);
+    return false;
+  }
+}
+
+window.BQStorage = {
+  exportSaveFile,
+  importSaveFileFromInput,
+  resetAllProgress,
+  saveNow: () => saveStateNow(true),
+  getState: () => structuredClone(state),
+};
+
+function migrateSave(raw) {
+  const source = raw && typeof raw === "object" ? raw : {};
+  const version = Number(source?.storage?.version || source?.saveVersion || 0);
+
+  if (version >= SAVE_VERSION) return source;
+
+  const migrated = {
+    ...source,
+  };
+
+  if (!migrated.storage || typeof migrated.storage !== "object") {
+    migrated.storage = {};
+  }
+
+  if (!migrated.captainNotes) migrated.captainNotes = [];
+  if (!migrated.route) migrated.route = null;
+  if (!migrated.rebuild) {
+    migrated.rebuild = {
+      abbey: {
+        points: 0,
+        stage: 0,
+        completedRoutes: [],
+        unlockedCore: false,
+        completedCore: false,
+        finished: false,
+      },
+    };
+  }
+
+  migrated.storage.version = SAVE_VERSION;
+  migrated.storage.migratedFrom = version;
+  migrated.storage.migratedAt = new Date().toISOString();
+
+  return migrated;
+}
+
+/* ============================
+   CONSTANTS
+============================ */
 const BADGE_MILESTONES = [
   { captures: 1, name: "Scout", icon: "🧭" },
   { captures: 5, name: "Explorer", icon: "🥾" },
@@ -50,40 +205,59 @@ const ABBEY_ROUTE_APPROACH_PIN_IDS = [
   "abbey_boss",
 ];
 
+/* ============================
+   DEFAULT STATE
+============================ */
 const DEFAULT_STATE = {
+  storage: {
+    version: SAVE_VERSION,
+    savedAt: null,
+    app: "Barrow Quest",
+    saveKey: SAVE_KEY,
+    migratedFrom: null,
+    migratedAt: null,
+  },
+
   players: [
     { id: "p1", name: "Player 1", coins: 0, enabled: true },
     { id: "p2", name: "Player 2", coins: 0, enabled: false },
     { id: "p3", name: "Player 3", coins: 0, enabled: false },
     { id: "p4", name: "Player 4", coins: 0, enabled: false },
   ],
+
   activePlayerId: "p1",
   mapMode: "core",
   activePack: "classic",
   activeAdultCategory: null,
   tierMode: "kid",
+
   unlockedMysteries: [],
   completedQuestionIds: [],
   recentQuestionTags: [],
+
   quizProfiles: {
     kid: getDefaultAdaptiveProfile("kid"),
     teen: getDefaultAdaptiveProfile("teen"),
     adult: getDefaultAdaptiveProfile("adult"),
   },
+
   purchasedItems: [],
   inventory: {},
   captainNotes: [],
+
   completedPins: {},
   pinStats: {
     totalCompleted: 0,
     totalFirstCompletions: 0,
     totalRepeatCompletions: 0,
   },
+
   meta: {
     xp: 0,
     tokens: 0,
     badges: [],
   },
+
   settings: {
     radius: 35,
     voicePitch: 1,
@@ -92,13 +266,16 @@ const DEFAULT_STATE = {
     zoomUI: false,
     character: "hero_duo",
   },
+
   adultLock: {
     unlocked: false,
     pin: "",
     sessionApproved: false,
     hideWhenKidsMode: false,
   },
+
   route: null,
+
   rebuild: {
     abbey: {
       points: 0,
@@ -163,6 +340,230 @@ const SHOP_ITEMS = [
   },
 ];
 
+/* ============================
+   SCRIPTED ABBEY ROUTES
+============================ */
+const ABBEY_ROUTE_DEFS = {
+  investigate: {
+    id: "investigate",
+    title: "Investigate the Monk Paths",
+    intro:
+      "Not all paths to the Abbey were visible. Some were used quietly by those who protected knowledge.",
+    steps: [
+      {
+        title: "The Hidden Path",
+        desc: "Why would a hidden path be important here?",
+        storyCategory: "place",
+        story:
+          "Not all paths to the Abbey were visible.\nSome were used only by those who needed to move quietly… and without notice.",
+        options: [
+          "For private movement and protected knowledge",
+          "For horse racing",
+          "For public trading",
+        ],
+        answer: 0,
+        fact:
+          "You’ve stepped onto the monks’ route. Hidden movement mattered here.",
+        clue: { value: "2", importance: "high", saveLabel: "Hidden Path = 2" },
+        rebuild: 2,
+        reward: { coins: 22, xp: 12 },
+      },
+      {
+        title: "Control and Structure",
+        desc: "What would monks value most in a place like this?",
+        storyCategory: "purpose",
+        story:
+          "The Abbey was not chaos.\nEvery movement… every path… had purpose.",
+        options: ["Order and routine", "Speed", "Noise"],
+        answer: 0,
+        fact:
+          "The Abbey worked because everything followed structure and routine.",
+        rebuild: 2,
+        reward: { coins: 24, xp: 14 },
+      },
+      {
+        title: "Work and Life",
+        desc: "What would monks likely be doing here each day?",
+        storyCategory: "people",
+        story:
+          "These paths were not just for prayer.\nThey carried workers, supplies… and daily life.",
+        options: ["Farming and labour", "Fighting", "Public trading"],
+        answer: 0,
+        fact:
+          "Work and worship were connected here. The Abbey was lived, not just visited.",
+        clue: {
+          value: "4",
+          importance: "low",
+          saveLabel: "Work and Worship = 4",
+        },
+        rebuild: 3,
+        reward: { coins: 28, xp: 16 },
+      },
+      {
+        title: "The Purpose",
+        desc: "What were these routes truly protecting?",
+        storyCategory: "loss",
+        story:
+          "The hidden paths were not built to hide.\nThey were built to protect what mattered.",
+        options: ["Knowledge and structure", "Food", "Money"],
+        answer: 0,
+        fact: "You are beginning to see the Abbey as it once was.",
+        clue: {
+          value: "6",
+          importance: "high",
+          saveLabel: "Protected Knowledge = 6",
+        },
+        rebuild: 5,
+        reward: { coins: 36, xp: 22 },
+        routeComplete: true,
+      },
+    ],
+  },
+
+  explore: {
+    id: "explore",
+    title: "Explore the Outer Grounds",
+    intro:
+      "Some truths are found by looking, walking, and noticing what others pass by.",
+    steps: [
+      {
+        title: "Outer Ground Marker",
+        desc: "What kind of place does this feel like?",
+        storyCategory: "place",
+        story:
+          "The outer grounds gave first impressions.\nWhat you notice here shapes what comes next.",
+        options: ["Open historic space", "Busy market", "Modern street"],
+        answer: 0,
+        fact: "You’ve marked the first outer landmark.",
+        rebuild: 1,
+        reward: { coins: 18, xp: 10 },
+      },
+      {
+        title: "Walking the Edge",
+        desc: "What matters most when exploring a place like this?",
+        storyCategory: "people",
+        story:
+          "The fastest walkers miss things.\nThe best explorers notice what remains.",
+        options: ["Looking carefully", "Rushing", "Ignoring details"],
+        answer: 0,
+        fact: "Exploration reveals what the eye almost misses.",
+        clue: {
+          value: "3",
+          importance: "low",
+          saveLabel: "Outer Edge = 3",
+        },
+        rebuild: 2,
+        reward: { coins: 20, xp: 12 },
+      },
+      {
+        title: "A Place Revealed",
+        desc: "What gives this place its meaning?",
+        storyCategory: "restoration",
+        story:
+          "The Abbey is more than stone.\nIt is memory, place, and what people carried into it.",
+        options: ["Its history and people", "Its speed", "Its noise"],
+        answer: 0,
+        fact: "You’ve restored part of the Abbey’s outer story.",
+        rebuild: 3,
+        reward: { coins: 24, xp: 14 },
+        routeComplete: true,
+      },
+    ],
+  },
+
+  advance: {
+    id: "advance",
+    title: "Advance Toward the Core",
+    intro:
+      "You’ve followed the outer paths. Now you step closer to the heart of the Abbey.",
+    steps: [
+      {
+        title: "Path Forward",
+        desc: "To move forward… you need to prove you understand the Abbey.",
+        storyCategory: "purpose",
+        story:
+          "You’ve followed the outer paths.\nNow you step closer to the heart of the Abbey.",
+        options: [
+          "Military defence",
+          "Worship, work, and community",
+          "Trade hub",
+        ],
+        answer: 1,
+        fact: "Path forward unlocked.",
+        rebuild: 2,
+        reward: { coins: 24, xp: 14 },
+      },
+      {
+        title: "Closer to the Core",
+        desc: "What kept the Abbey running every day?",
+        storyCategory: "people",
+        story:
+          "You’re close now.\nThis is where the Abbey’s structure became most important.",
+        options: ["Random activity", "Strict routine and order", "External trade"],
+        answer: 1,
+        fact: "You understand how the Abbey functioned.",
+        rebuild: 2,
+        reward: { coins: 28, xp: 16 },
+      },
+      {
+        title: "Pre-Core Pressure",
+        desc: "Answer quickly. What was the Abbey built to protect?",
+        storyCategory: "loss",
+        story:
+          "You’re almost there.\nThis is where mistakes mattered.",
+        options: ["Wealth", "Knowledge and belief", "Soldiers"],
+        answer: 1,
+        followUp: {
+          desc: "And what kept it stable?",
+          options: ["Strict order", "Freedom", "Trade"],
+          answer: 0,
+        },
+        fact: "The Abbey core is now within reach.",
+        clue: {
+          value: "8",
+          importance: "high",
+          saveLabel: "Core Pressure = 8",
+        },
+        rebuild: 4,
+        reward: { coins: 34, xp: 20 },
+        routeComplete: true,
+      },
+    ],
+  },
+
+  core: {
+    id: "core",
+    title: "The Lost Order Core",
+    intro:
+      "You’ve reached it. The heart of the Abbey. Everything you’ve followed led you here.",
+    steps: [
+      {
+        title: "The Heart of the Abbey",
+        desc: "What was the true purpose of the Abbey?",
+        storyCategory: "restoration",
+        story:
+          "You’ve reached it…\nThe heart of the Abbey.\nEverything you’ve followed… every path… every clue… led you here.",
+        options: ["Power", "Wealth", "Faith, structure, and way of life"],
+        answer: 2,
+        fact:
+          "You understand. The Abbey was held together by faith, order, labour, and shared purpose.",
+        rebuild: 10,
+        reward: { coins: 150, xp: 100 },
+        clue: {
+          value: "CORE",
+          importance: "high",
+          saveLabel: "Heart of the Abbey = CORE",
+        },
+        routeComplete: true,
+        coreComplete: true,
+      },
+    ],
+  },
+};
+
+/* ============================
+   GLOBAL STATE / RUNTIME
+============================ */
 let state = loadState();
 
 let map = null;
@@ -208,217 +609,6 @@ const CLASSIC_MODE_ORDER = [
   "boss",
   "discovery",
 ];
-
-/* ============================
-   SCRIPTED ABBEY ROUTES
-============================ */
-const ABBEY_ROUTE_DEFS = {
-  investigate: {
-    id: "investigate",
-    title: "Investigate the Monk Paths",
-    intro:
-      "Not all paths to the Abbey were visible. Some were used quietly by those who protected knowledge.",
-    steps: [
-      {
-        title: "The Hidden Path",
-        desc: "Why would a hidden path be important here?",
-        story:
-          "Not all paths to the Abbey were visible.\nSome were used only by those who needed to move quietly… and without notice.",
-        options: [
-          "For private movement and protected knowledge",
-          "For horse racing",
-          "For public trading",
-        ],
-        answer: 0,
-        fact:
-          "You’ve stepped onto the monks’ route. Hidden movement mattered here.",
-        clue: { value: "2", importance: "high", saveLabel: "Hidden Path = 2" },
-        rebuild: 2,
-        reward: { coins: 22, xp: 12 },
-      },
-      {
-        title: "Control and Structure",
-        desc: "What would monks value most in a place like this?",
-        story:
-          "The Abbey was not chaos.\nEvery movement… every path… had purpose.",
-        options: ["Order and routine", "Speed", "Noise"],
-        answer: 0,
-        fact:
-          "The Abbey worked because everything followed structure and routine.",
-        rebuild: 2,
-        reward: { coins: 24, xp: 14 },
-      },
-      {
-        title: "Work and Life",
-        desc: "What would monks likely be doing here each day?",
-        story:
-          "These paths were not just for prayer.\nThey carried workers, supplies… and daily life.",
-        options: ["Farming and labour", "Fighting", "Public trading"],
-        answer: 0,
-        fact:
-          "Work and worship were connected here. The Abbey was lived, not just visited.",
-        clue: {
-          value: "4",
-          importance: "low",
-          saveLabel: "Work and Worship = 4",
-        },
-        rebuild: 3,
-        reward: { coins: 28, xp: 16 },
-      },
-      {
-        title: "The Purpose",
-        desc: "What were these routes truly protecting?",
-        story:
-          "The hidden paths were not built to hide.\nThey were built to protect what mattered.",
-        options: ["Knowledge and structure", "Food", "Money"],
-        answer: 0,
-        fact:
-          "You are beginning to see the Abbey as it once was.",
-        clue: {
-          value: "6",
-          importance: "high",
-          saveLabel: "Protected Knowledge = 6",
-        },
-        rebuild: 5,
-        reward: { coins: 36, xp: 22 },
-        routeComplete: true,
-      },
-    ],
-  },
-
-  explore: {
-    id: "explore",
-    title: "Explore the Outer Grounds",
-    intro:
-      "Some truths are found by looking, walking, and noticing what others pass by.",
-    steps: [
-      {
-        title: "Outer Ground Marker",
-        desc: "What kind of place does this feel like?",
-        story:
-          "The outer grounds gave first impressions.\nWhat you notice here shapes what comes next.",
-        options: ["Open historic space", "Busy market", "Modern street"],
-        answer: 0,
-        fact: "You’ve marked the first outer landmark.",
-        rebuild: 1,
-        reward: { coins: 18, xp: 10 },
-      },
-      {
-        title: "Walking the Edge",
-        desc: "What matters most when exploring a place like this?",
-        story:
-          "The fastest walkers miss things.\nThe best explorers notice what remains.",
-        options: ["Looking carefully", "Rushing", "Ignoring details"],
-        answer: 0,
-        fact: "Exploration reveals what the eye almost misses.",
-        clue: {
-          value: "3",
-          importance: "low",
-          saveLabel: "Outer Edge = 3",
-        },
-        rebuild: 2,
-        reward: { coins: 20, xp: 12 },
-      },
-      {
-        title: "A Place Revealed",
-        desc: "What gives this place its meaning?",
-        story:
-          "The Abbey is more than stone.\nIt is memory, place, and what people carried into it.",
-        options: ["Its history and people", "Its speed", "Its noise"],
-        answer: 0,
-        fact: "You’ve restored part of the Abbey’s outer story.",
-        rebuild: 3,
-        reward: { coins: 24, xp: 14 },
-        routeComplete: true,
-      },
-    ],
-  },
-
-  advance: {
-    id: "advance",
-    title: "Advance Toward the Core",
-    intro:
-      "You’ve followed the outer paths. Now you step closer to the heart of the Abbey.",
-    steps: [
-      {
-        title: "Path Forward",
-        desc: "To move forward… you need to prove you understand the Abbey.",
-        story:
-          "You’ve followed the outer paths.\nNow you step closer to the heart of the Abbey.",
-        options: [
-          "Military defence",
-          "Worship, work, and community",
-          "Trade hub",
-        ],
-        answer: 1,
-        fact: "Path forward unlocked.",
-        rebuild: 2,
-        reward: { coins: 24, xp: 14 },
-      },
-      {
-        title: "Closer to the Core",
-        desc: "What kept the Abbey running every day?",
-        story:
-          "You’re close now.\nThis is where the Abbey’s structure became most important.",
-        options: ["Random activity", "Strict routine and order", "External trade"],
-        answer: 1,
-        fact: "You understand how the Abbey functioned.",
-        rebuild: 2,
-        reward: { coins: 28, xp: 16 },
-      },
-      {
-        title: "Pre-Core Pressure",
-        desc: "Answer quickly. What was the Abbey built to protect?",
-        story:
-          "You’re almost there.\nThis is where mistakes mattered.",
-        options: ["Wealth", "Knowledge and belief", "Soldiers"],
-        answer: 1,
-        followUp: {
-          desc: "And what kept it stable?",
-          options: ["Strict order", "Freedom", "Trade"],
-          answer: 0,
-        },
-        fact: "The Abbey core is now within reach.",
-        clue: {
-          value: "8",
-          importance: "high",
-          saveLabel: "Core Pressure = 8",
-        },
-        rebuild: 4,
-        reward: { coins: 34, xp: 20 },
-        routeComplete: true,
-      },
-    ],
-  },
-
-  core: {
-    id: "core",
-    title: "The Lost Order Core",
-    intro:
-      "You’ve reached it. The heart of the Abbey. Everything you’ve followed led you here.",
-    steps: [
-      {
-        title: "The Heart of the Abbey",
-        desc: "What was the true purpose of the Abbey?",
-        story:
-          "You’ve reached it…\nThe heart of the Abbey.\nEverything you’ve followed… every path… every clue… led you here.",
-        options: ["Power", "Wealth", "Faith, structure, and way of life"],
-        answer: 2,
-        fact:
-          "You understand. The Abbey was held together by faith, order, labour, and shared purpose.",
-        rebuild: 10,
-        reward: { coins: 150, xp: 100 },
-        clue: {
-          value: "CORE",
-          importance: "high",
-          saveLabel: "Heart of the Abbey = CORE",
-        },
-        routeComplete: true,
-        coreComplete: true,
-      },
-    ],
-  },
-};
 
 /* ============================
    SPEECH / NARRATOR
@@ -469,7 +659,7 @@ function speakOptions(options = []) {
 }
 
 /* ============================
-   SAVE / STATE
+   STATE NORMALISERS
 ============================ */
 function normaliseAdultLock(lock = {}) {
   return {
@@ -518,82 +708,150 @@ function normaliseRebuild(rebuild = {}) {
   };
 }
 
+function normaliseStorage(storage = {}) {
+  return {
+    ...computeStorageHealth(),
+    ...storage,
+    version: SAVE_VERSION,
+  };
+}
+
+function normaliseLoadedState(parsed) {
+  const safe = parsed && typeof parsed === "object" ? parsed : {};
+
+  return {
+    ...structuredClone(DEFAULT_STATE),
+    ...safe,
+
+    storage: normaliseStorage(safe.storage || {}),
+
+    settings: {
+      ...structuredClone(DEFAULT_STATE.settings),
+      ...(safe.settings || {}),
+    },
+
+    players:
+      Array.isArray(safe.players) && safe.players.length
+        ? safe.players
+        : structuredClone(DEFAULT_STATE.players),
+
+    unlockedMysteries: Array.isArray(safe.unlockedMysteries)
+      ? safe.unlockedMysteries
+      : [],
+
+    completedQuestionIds: Array.isArray(safe.completedQuestionIds)
+      ? safe.completedQuestionIds
+      : [],
+
+    recentQuestionTags: Array.isArray(safe.recentQuestionTags)
+      ? safe.recentQuestionTags
+      : [],
+
+    quizProfiles:
+      safe.quizProfiles && typeof safe.quizProfiles === "object"
+        ? {
+            kid: normaliseAdaptiveProfile(safe.quizProfiles.kid || {}, "kid"),
+            teen: normaliseAdaptiveProfile(safe.quizProfiles.teen || {}, "teen"),
+            adult: normaliseAdaptiveProfile(
+              safe.quizProfiles.adult || {},
+              "adult"
+            ),
+          }
+        : {
+            kid: getDefaultAdaptiveProfile("kid"),
+            teen: getDefaultAdaptiveProfile("teen"),
+            adult: getDefaultAdaptiveProfile("adult"),
+          },
+
+    purchasedItems: Array.isArray(safe.purchasedItems)
+      ? safe.purchasedItems
+      : [],
+
+    inventory:
+      safe.inventory && typeof safe.inventory === "object"
+        ? safe.inventory
+        : {},
+
+    captainNotes: Array.isArray(safe.captainNotes)
+      ? safe.captainNotes
+      : [],
+
+    completedPins:
+      safe.completedPins && typeof safe.completedPins === "object"
+        ? safe.completedPins
+        : {},
+
+    pinStats: {
+      ...structuredClone(DEFAULT_STATE.pinStats),
+      ...(safe.pinStats || {}),
+    },
+
+    meta: {
+      ...structuredClone(DEFAULT_STATE.meta),
+      ...(safe.meta || {}),
+      badges: Array.isArray(safe?.meta?.badges) ? safe.meta.badges : [],
+    },
+
+    adultLock: normaliseAdultLock(safe.adultLock || {}),
+    route: normaliseRoute(safe.route || null),
+    rebuild: normaliseRebuild(safe.rebuild || {}),
+  };
+}
+
+function buildSavePayload() {
+  return {
+    ...state,
+    storage: {
+      ...computeStorageHealth(),
+      ...(state.storage || {}),
+      version: SAVE_VERSION,
+      savedAt: new Date().toISOString(),
+    },
+    saveVersion: SAVE_VERSION,
+  };
+}
+
 function loadState() {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return structuredClone(DEFAULT_STATE);
 
     const parsed = JSON.parse(raw);
-
-    return {
-      ...structuredClone(DEFAULT_STATE),
-      ...parsed,
-      settings: {
-        ...structuredClone(DEFAULT_STATE.settings),
-        ...(parsed.settings || {}),
-      },
-      players:
-        Array.isArray(parsed.players) && parsed.players.length
-          ? parsed.players
-          : structuredClone(DEFAULT_STATE.players),
-      unlockedMysteries: Array.isArray(parsed.unlockedMysteries)
-        ? parsed.unlockedMysteries
-        : [],
-      completedQuestionIds: Array.isArray(parsed.completedQuestionIds)
-        ? parsed.completedQuestionIds
-        : [],
-      recentQuestionTags: Array.isArray(parsed.recentQuestionTags)
-        ? parsed.recentQuestionTags
-        : [],
-      quizProfiles:
-        parsed.quizProfiles && typeof parsed.quizProfiles === "object"
-          ? {
-              kid: normaliseAdaptiveProfile(parsed.quizProfiles.kid || {}, "kid"),
-              teen: normaliseAdaptiveProfile(parsed.quizProfiles.teen || {}, "teen"),
-              adult: normaliseAdaptiveProfile(
-                parsed.quizProfiles.adult || {},
-                "adult"
-              ),
-            }
-          : {
-              kid: getDefaultAdaptiveProfile("kid"),
-              teen: getDefaultAdaptiveProfile("teen"),
-              adult: getDefaultAdaptiveProfile("adult"),
-            },
-      purchasedItems: Array.isArray(parsed.purchasedItems)
-        ? parsed.purchasedItems
-        : [],
-      inventory:
-        parsed.inventory && typeof parsed.inventory === "object"
-          ? parsed.inventory
-          : {},
-      captainNotes: Array.isArray(parsed.captainNotes)
-        ? parsed.captainNotes
-        : [],
-      completedPins:
-        parsed.completedPins && typeof parsed.completedPins === "object"
-          ? parsed.completedPins
-          : {},
-      pinStats: {
-        ...structuredClone(DEFAULT_STATE.pinStats),
-        ...(parsed.pinStats || {}),
-      },
-      meta: {
-        ...structuredClone(DEFAULT_STATE.meta),
-        ...(parsed.meta || {}),
-        badges: Array.isArray(parsed?.meta?.badges) ? parsed.meta.badges : [],
-      },
-      adultLock: normaliseAdultLock(parsed.adultLock || {}),
-      route: normaliseRoute(parsed.route || null),
-      rebuild: normaliseRebuild(parsed.rebuild || {}),
-    };
-  } catch {
-    return structuredClone(DEFAULT_STATE);
+    const migrated = migrateSave(parsed);
+    const loaded = normaliseLoadedState(migrated);
+    lastSaveHash = stableStringify(buildSavePayloadFromState(loaded));
+    return loaded;
+  } catch (err) {
+    console.warn("Primary save failed, trying backup:", err);
+    try {
+      const backup = localStorage.getItem(BACKUP_KEY);
+      if (!backup) return structuredClone(DEFAULT_STATE);
+      const parsedBackup = JSON.parse(backup);
+      const migratedBackup = migrateSave(parsedBackup);
+      const loadedBackup = normaliseLoadedState(migratedBackup);
+      lastSaveHash = stableStringify(buildSavePayloadFromState(loadedBackup));
+      return loadedBackup;
+    } catch (backupErr) {
+      console.error("Backup load failed:", backupErr);
+      return structuredClone(DEFAULT_STATE);
+    }
   }
 }
 
+function buildSavePayloadFromState(sourceState) {
+  return {
+    ...sourceState,
+    storage: {
+      ...computeStorageHealth(),
+      ...(sourceState.storage || {}),
+      version: SAVE_VERSION,
+    },
+    saveVersion: SAVE_VERSION,
+  };
+}
+
 function saveState() {
-  localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+  queueSaveState();
 }
 
 /* ============================
@@ -817,7 +1075,7 @@ function closeRewardImageModal() {
 }
 
 /* ============================
-   CAPTAIN NOTES / BROADCAST
+   NOTES / STORAGE HELPERS
 ============================ */
 function escapeHtml(value) {
   return String(value || "")
@@ -864,6 +1122,13 @@ function renderCaptainNotes() {
           <div style="white-space:pre-wrap;line-height:1.45;">${escapeHtml(
             note.text
           )}</div>
+          <div style="margin-top:6px;font-size:11px;color:var(--muted);">
+            ${note.kind ? String(note.kind).toUpperCase() : "NOTE"} • ${
+        note.createdAt
+          ? new Date(note.createdAt).toLocaleString()
+          : "saved"
+      }
+          </div>
           <div style="margin-top:10px;">
             <button
               class="win-btn captain-note-delete-btn"
@@ -885,7 +1150,7 @@ function renderCaptainNotes() {
   });
 }
 
-function saveCaptainNote(text) {
+function saveCaptainNote(text, kind = "note", source = "") {
   const clean = String(text || "").trim();
   if (!clean) return false;
 
@@ -896,10 +1161,12 @@ function saveCaptainNote(text) {
   state.captainNotes.unshift({
     id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     text: clean,
+    kind,
+    source,
     createdAt: new Date().toISOString(),
   });
 
-  state.captainNotes = state.captainNotes.slice(0, 50);
+  state.captainNotes = state.captainNotes.slice(0, 120);
   saveState();
   renderCaptainNotes();
   return true;
@@ -910,6 +1177,20 @@ function deleteCaptainNote(noteId) {
   state.captainNotes = state.captainNotes.filter((n) => n.id !== noteId);
   saveState();
   renderCaptainNotes();
+}
+
+function saveClueToCaptainNotes(clue, sourceTitle = "Clue") {
+  if (!clue) return;
+  const line =
+    typeof clue === "string"
+      ? clue
+      : `${sourceTitle}: ${clue.saveLabel || clue.value || "clue"}`;
+  saveCaptainNote(line, "clue", sourceTitle);
+}
+
+function saveRouteStoryToNotes(title, storyText, category = "story") {
+  if (!storyText) return false;
+  return saveCaptainNote(`${title}\n\n${storyText}`, category, title);
 }
 
 function sendBroadcastMessage() {
@@ -936,7 +1217,7 @@ function handleSaveCaptainNote() {
     return;
   }
 
-  const ok = saveCaptainNote(text);
+  const ok = saveCaptainNote(text, "note", "Commander");
   if (!ok) return;
 
   speakText("Captain note saved.");
@@ -1246,15 +1527,6 @@ function getAbbeyRouteStatusText() {
   } • CLUES ${clueText}`;
 }
 
-function saveClueToCaptainNotes(clue, sourceTitle = "Clue") {
-  if (!clue) return;
-  const line =
-    typeof clue === "string"
-      ? clue
-      : `${sourceTitle}: ${clue.saveLabel || clue.value || "clue"}`;
-  saveCaptainNote(line);
-}
-
 function maybeAddScriptedClue(clue, title) {
   if (!clue || !state.route) return;
 
@@ -1267,8 +1539,18 @@ function maybeAddScriptedClue(clue, title) {
       importance: clue.importance || "low",
       saveLabel: clue.saveLabel || String(clue.value),
       title: title || "Clue",
+      savedAt: new Date().toISOString(),
     });
   }
+}
+
+function getRewardPresentationMode() {
+  if (state.activePack === "adult") return "adult";
+
+  const tier = getEffectiveTier();
+  if (tier === "kid") return "kid";
+  if (tier === "teen") return "teen";
+  return "adult";
 }
 
 function getClueAnnouncementText(clue) {
@@ -1407,6 +1689,7 @@ function openAbbeyRouteIntro(pathId) {
   wrap.style.display = "grid";
   wrap.innerHTML = `
     <button class="mcq-btn" id="route-begin-btn">START ROUTE</button>
+    <button class="mcq-btn" id="route-save-intro-btn">SAVE STORY TO NOTES</button>
     <button class="mcq-btn" id="route-back-btn">BACK TO ROUTE CHOICE</button>
   `;
 
@@ -1414,6 +1697,12 @@ function openAbbeyRouteIntro(pathId) {
     state.route.step = 0;
     saveState();
     runAbbeyRouteStep();
+  });
+
+  $("route-save-intro-btn")?.addEventListener("click", () => {
+    saveRouteStoryToNotes(def.title, def.intro, "route_intro");
+    speakText("Route intro saved to notes.");
+    alert("Route intro saved to notes.");
   });
 
   $("route-back-btn")?.addEventListener("click", () => {
@@ -1604,9 +1893,7 @@ function resolveAbbeyRouteStep(step) {
   }
 
   const narrationParts = [step.fact || "Progress made."];
-  if (step.clue) {
-    narrationParts.push(clueAnnouncement);
-  }
+  if (step.clue) narrationParts.push(clueAnnouncement);
   narrationParts.push(
     `${Number(reward.coins || 0)} coins earned and ${Number(reward.xp || 0)} XP.`
   );
@@ -1616,16 +1903,25 @@ function resolveAbbeyRouteStep(step) {
   const wrap = $("task-options");
   if (wrap) {
     const clueButtons = step.clue
-      ? `
-      <button class="mcq-btn" id="save-route-clue-btn">SAVE CLUE TO NOTES</button>
-    `
+      ? `<button class="mcq-btn" id="save-route-clue-btn">SAVE CLUE TO NOTES</button>`
       : "";
     wrap.innerHTML = `
+      <button class="mcq-btn" id="save-route-story-btn">SAVE STORY TO NOTES</button>
       ${clueButtons}
       <button class="mcq-btn" id="continue-route-btn">CONTINUE</button>
       <button class="mcq-btn" id="back-route-choice-btn">BACK TO ROUTE CHOICE</button>
     `;
   }
+
+  $("save-route-story-btn")?.addEventListener("click", () => {
+    saveRouteStoryToNotes(
+      step.title || "Story",
+      step.story || step.desc || "",
+      step.storyCategory || "story"
+    );
+    speakText("Story saved to notes.");
+    alert("Story saved to notes.");
+  });
 
   $("save-route-clue-btn")?.addEventListener("click", () => {
     saveClueToCaptainNotes(step.clue, step.title || "Clue");
@@ -1712,10 +2008,21 @@ function finishAbbeyRoute() {
   if (wrap) {
     wrap.style.display = "grid";
     wrap.innerHTML = `
+      <button class="mcq-btn" id="abbey-route-save-summary-btn">SAVE ROUTE SUMMARY TO NOTES</button>
       <button class="mcq-btn" id="abbey-route-choice-btn">RETURN TO ROUTE CHOICE</button>
       <button class="mcq-btn" id="abbey-route-close-btn">CLOSE</button>
     `;
   }
+
+  $("abbey-route-save-summary-btn")?.addEventListener("click", () => {
+    const summaryText =
+      pathId === "core"
+        ? "Abbey Core Complete: The Lost Order Restored"
+        : `${def?.title || "Route"} Complete\nClues: ${clueText}`;
+    saveCaptainNote(summaryText, "route_summary", def?.title || "Abbey Route");
+    speakText("Route summary saved.");
+    alert("Route summary saved.");
+  });
 
   $("abbey-route-choice-btn")?.addEventListener("click", () => {
     renderAbbeyRouteChoice();
@@ -1788,54 +2095,12 @@ function completeAbbeyCoreReward() {
     "./monk.jpg"
   );
 
-  saveCaptainNote("Abbey Core Complete: The Lost Order Restored");
+  saveCaptainNote(
+    "Abbey Core Complete: The Lost Order Restored",
+    "route_summary",
+    "Abbey Core"
+  );
   saveState();
-}
-
-/* ============================
-   PRESENTATION MODES
-============================ */
-function getRewardPresentationMode() {
-  if (state.activePack === "adult") return "adult";
-
-  const tier = getEffectiveTier();
-  if (tier === "kid") return "kid";
-  if (tier === "teen") return "teen";
-  return "adult";
-}
-
-function speakRewardSequence({
-  factText,
-  rewardCoins,
-  rewardXp,
-  newLevel,
-  oldLevel,
-  fullCaptureJustUnlocked,
-}) {
-  const mode = getRewardPresentationMode();
-  const levelUpText =
-    newLevel > oldLevel ? ` You reached level ${newLevel}.` : "";
-  const captureText = fullCaptureJustUnlocked
-    ? " Node fully captured."
-    : " Progress saved.";
-
-  if (mode === "kid") {
-    const line = `${factText}. You earned ${rewardCoins} coins and ${rewardXp} XP.${captureText}${levelUpText}`;
-    speakText(line);
-    return 1200;
-  }
-
-  if (mode === "teen") {
-    const intro = `Correct. You earned ${rewardCoins} coins and ${rewardXp} XP.`;
-    const fact = factText ? ` ${factText}.` : "";
-    const level = levelUpText ? ` ${levelUpText.trim()}` : "";
-    speakText(`${intro}${fact}${captureText}${level}`);
-    return 1100;
-  }
-
-  const adultLine = `${factText}.${captureText}${levelUpText} You earned ${rewardCoins} coins and ${rewardXp} XP.`;
-  speakText(adultLine);
-  return 1500;
 }
 
 /* ============================
@@ -2967,6 +3232,40 @@ function rememberQuestion(questionId) {
   }
 }
 
+function speakRewardSequence({
+  factText,
+  rewardCoins,
+  rewardXp,
+  newLevel,
+  oldLevel,
+  fullCaptureJustUnlocked,
+}) {
+  const mode = getRewardPresentationMode();
+  const levelUpText =
+    newLevel > oldLevel ? ` You reached level ${newLevel}.` : "";
+  const captureText = fullCaptureJustUnlocked
+    ? " Node fully captured."
+    : " Progress saved.";
+
+  if (mode === "kid") {
+    const line = `${factText}. You earned ${rewardCoins} coins and ${rewardXp} XP.${captureText}${levelUpText}`;
+    speakText(line);
+    return 1200;
+  }
+
+  if (mode === "teen") {
+    const intro = `Correct. You earned ${rewardCoins} coins and ${rewardXp} XP.`;
+    const fact = factText ? ` ${factText}.` : "";
+    const level = levelUpText ? ` ${levelUpText.trim()}` : "";
+    speakText(`${intro}${fact}${captureText}${level}`);
+    return 1100;
+  }
+
+  const adultLine = `${factText}.${captureText}${levelUpText} You earned ${rewardCoins} coins and ${rewardXp} XP.`;
+  speakText(adultLine);
+  return 1500;
+}
+
 function applyMissionOutcome({
   isCorrect = true,
   manual = false,
@@ -3217,6 +3516,7 @@ function renderHomeLog() {
   const lock = getAdultLock();
   const abbey = getAbbeyRebuild();
   const route = state.route;
+  const noteCount = Array.isArray(state.captainNotes) ? state.captainNotes.length : 0;
 
   summary.innerHTML = `
     <div style="padding:12px;border:1px solid #444;border-radius:14px;background:#111;line-height:1.6;">
@@ -3242,9 +3542,7 @@ function renderHomeLog() {
       <div><strong>MODE REMAINING:</strong> ${currentProgress.remaining}</div>
       <div><strong>MYSTERIES UNLOCKED:</strong> ${mysteryCount}</div>
       <div><strong>COMPLETED PROMPTS TRACKED:</strong> ${completedCount}</div>
-      <div><strong>TOTAL FIRST CAPTURES:</strong> ${Number(
-        state.pinStats?.totalFirstCompletions || 0
-      )}</div>
+      <div><strong>CAPTAIN NOTES:</strong> ${noteCount}</div>
       <div><strong>ABBey REBUILD:</strong> ${abbey.points} (Stage ${abbey.stage})</div>
       <div><strong>ABBey ROUTES COMPLETE:</strong> ${
         abbey.completedRoutes.length ? abbey.completedRoutes.join(", ") : "none"
@@ -3295,7 +3593,9 @@ function renderHomeLog() {
     <div style="padding:10px;border:1px solid #444;border-radius:12px;margin:8px 0 14px;background:#161616;">
       <div style="font-weight:bold;color:var(--gold);">ACTIVE ROUTE CLUES</div>
       <div style="margin-top:8px;font-size:13px;line-height:1.6;">
-        ${route.clues.map((c) => `${c.value} — ${c.saveLabel || c.title || "clue"}`).join("<br>")}
+        ${route.clues
+          .map((c) => `${c.value} — ${c.saveLabel || c.title || "clue"}`)
+          .join("<br>")}
       </div>
     </div>
   `
@@ -3398,6 +3698,24 @@ function stopAR() {
     video.srcObject = null;
   }
   arStream = null;
+}
+
+/* ============================
+   RENDER ALL / FULL REFRESH
+============================ */
+function renderEverything() {
+  renderHUD();
+  applySettingsToUI();
+  updateStartButtons();
+  refreshAdultLockUI();
+  showQuestLayoutForPack();
+  renderHomeLog();
+  renderShop();
+  renderCaptainNotes();
+
+  if (map) {
+    refreshAllPinMarkers();
+  }
 }
 
 /* ============================
@@ -3710,6 +4028,10 @@ function wireButtons() {
     speakText("Hotspot verified.");
     alert("Hotspot verified.");
   });
+
+  window.addEventListener("beforeunload", () => {
+    saveStateNow(true);
+  });
 }
 
 /* ============================
@@ -3717,14 +4039,7 @@ function wireButtons() {
 ============================ */
 function boot() {
   try {
-    renderHUD();
-    applySettingsToUI();
-    updateStartButtons();
-    refreshAdultLockUI();
-    showQuestLayoutForPack();
-    renderHomeLog();
-    renderShop();
-    renderCaptainNotes();
+    renderEverything();
     wireButtons();
 
     loadVoices();
@@ -3734,6 +4049,8 @@ function boot() {
 
     initMap();
     checkBadgeUnlocksByCaptures();
+    saveStateNow(true);
+
     console.log("App loaded");
   } catch (err) {
     console.error("BOOT ERROR:", err);
