@@ -1884,194 +1884,77 @@ function openAbbeyRouteIntro(pathId) {
   speakText(def.intro || def.title);
 }
 
-function runAbbeyRouteStep() {
-  if (!state.route || state.route.type !== "abbey" || !state.route.path) {
-    renderAbbeyRouteChoice();
-    return;
-  }
+function answerAbbeyRouteStep(index) {
+  if (!state.route || state.route.type !== "abbey") return;
 
   const def = ABBEY_ROUTE_DEFS[state.route.path];
-  if (!def) {
-    renderAbbeyRouteChoice();
-    return;
-  }
+  const step = def?.steps?.[state.route.step];
+  const feedback = $("task-feedback");
 
-  const stepIndex = Number(state.route.step || 0);
-  const step = def.steps[stepIndex];
+  if (!def || !step || !feedback) return;
 
-  if (!step) {
-    finishAbbeyRoute();
-    return;
-  }
+  if (state.route.awaitFollowUp) {
+    const follow = state.route.awaitFollowUp;
+    const isCorrect = index === Number(follow.answer);
 
-  currentTask = {
-    mode: "abbey_scripted_step",
-    pin: currentPin,
-    question: step,
-  };
-
-  if ($("task-title")) $("task-title").innerText = step.title || def.title;
-  if ($("task-desc")) $("task-desc").innerText = step.desc || "";
-
-  clearTaskBlocks();
-  setTaskBlock("task-block-story", "task-story", step.story || "");
-  setTaskBlock("task-block-evidence", "task-evidence", "");
-  setTaskBlock("task-block-clue", "task-clue", "");
-
-  const wrap = $("task-options");
-  if (!wrap) return;
-
-  wrap.style.display = "grid";
-  wrap.innerHTML = (step.options || [])
-    .map(
-      (opt, index) => `
-      <button class="mcq-btn abbey-step-option" data-step-index="${index}">
-        ${opt}
-      </button>
-    `
-    )
-    .join("");
-
-  document.querySelectorAll(".abbey-step-option").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      answerAbbeyRouteStep(Number(btn.dataset.stepIndex || -1));
-    });
-  });
-
-  if ($("task-feedback")) {
-    $("task-feedback").style.display = "block";
-    $("task-feedback").style.color = "var(--gold)";
-    $("task-feedback").innerText = getAbbeyRouteStatusText();
-  }
-
-  showModal("task-modal");
-  speakText(step.story || step.desc || step.title);
-}
-
-
-function resolveAbbeyRouteStep(step) {
-  if (!state.route || !step) return;
-
-const feedback = $("task-feedback");
-  const active = getActivePlayer();
-  const reward = step.reward || { coins: 20, xp: 10, tokens: 0 };
-
-  if (active && reward.coins) {
-    updateCoins(active.id, Number(reward.coins || 0));
-  }
-
-  state.meta.xp = Number(state.meta.xp || 0) + Number(reward.xp || 0);
-  state.meta.tokens =
-    Number(state.meta.tokens || 0) + Number(reward.tokens || 0);
-
-  state.route.completedNodes = Number(state.route.completedNodes || 0) + 1;
-  state.route.rebuildPoints =
-    Number(state.route.rebuildPoints || 0) + Number(step.rebuild || 0);
-
-  addAbbeyRebuildPoints(step.rebuild || 0);
-
-  if (step.clue) {
-    maybeAddScriptedClue(step.clue, step.title);
-  }
-
-  const clueAnnouncement = getClueAnnouncementText(step.clue);
-  const lines = [];
-
-  lines.push(step.fact || "Progress made.");
-  lines.push(`+${Number(reward.coins || 0)} coins`);
-  lines.push(`+${Number(reward.xp || 0)} XP`);
-  if (Number(reward.tokens || 0) > 0) {
-    lines.push(`+${Number(reward.tokens || 0)} tokens`);
-  }
-
-  if (step.clue) {
-    lines.push("");
-    lines.push(clueAnnouncement);
-  }
-
-  lines.push("");
-  lines.push(`REBUILD +${Number(step.rebuild || 0)}`);
-
-  if (feedback) {
-    feedback.style.display = "block";
-    feedback.style.color = "var(--neon)";
-    feedback.innerText = lines.join("\n");
-  }
-
-  const narrationParts = [step.fact || "Progress made."];
-  if (step.clue) narrationParts.push(clueAnnouncement);
-
-  const rewardSpeechBits = [];
-  if (Number(reward.coins || 0) > 0) {
-    rewardSpeechBits.push(`${Number(reward.coins || 0)} coins`);
-  }
-  if (Number(reward.xp || 0) > 0) {
-    rewardSpeechBits.push(`${Number(reward.xp || 0)} XP`);
-  }
-  if (Number(reward.tokens || 0) > 0) {
-    rewardSpeechBits.push(`${Number(reward.tokens || 0)} tokens`);
-  }
-  if (rewardSpeechBits.length) {
-    narrationParts.push(`Rewards earned: ${rewardSpeechBits.join(", ")}.`);
-  }
-
-  speakText(narrationParts.join(" "));
-
-  const wrap = $("task-options");
-  if (wrap) {
-    const clueButtons = step.clue
-      ? `<button class="mcq-btn" id="save-route-clue-btn">SAVE CLUE TO NOTES</button>`
-      : "";
-
-    wrap.innerHTML = `
-      <button class="mcq-btn" id="save-route-story-btn">SAVE STORY TO NOTES</button>
-      ${clueButtons}
-      <button class="mcq-btn" id="continue-route-btn">CONTINUE</button>
-      <button class="mcq-btn" id="back-route-choice-btn">BACK TO ROUTE CHOICE</button>
-    `;
-  }
-
-  $("save-route-story-btn")?.addEventListener("click", () => {
-    saveRouteStoryToNotes(
-      step.title || "Story",
-      step.story || step.desc || "",
-      step.storyCategory || "story"
-    );
-    speakText("Story saved to notes.");
-    alert("Story saved to notes.");
-  });
-
-  $("save-route-clue-btn")?.addEventListener("click", () => {
-    saveClueToCaptainNotes(step.clue, step.title || "Clue");
-    speakText("Clue saved to notes.");
-    alert("Clue saved to notes.");
-  });
-
-  $("continue-route-btn")?.addEventListener("click", () => {
-    state.route.step = Number(state.route.step || 0) + 1;
-    state.route.awaitFollowUp = null;
-
-    if (step.routeComplete) {
-      finishAbbeyRoute();
+    if (!isCorrect) {
+      feedback.style.display = "block";
+      feedback.style.color = "#ff6b6b";
+      feedback.innerText = "Not quite. Try again.";
+      speakText("Not quite. Try again.");
       return;
     }
 
-    saveState();
-    runAbbeyRouteStep();
-  });
-
-  $("back-route-choice-btn")?.addEventListener("click", () => {
-    renderAbbeyRouteChoice();
-  });
-
-  if (step.coreComplete) {
-    completeAbbeyCoreReward();
+    state.route.awaitFollowUp = null;
+    resolveAbbeyRouteStep(step);
+    return;
   }
 
-  saveState();
-  renderHUD();
-  renderHomeLog();
+  const isCorrect = index === Number(step.answer);
+
+  if (!isCorrect) {
+    feedback.style.display = "block";
+    feedback.style.color = "#ff6b6b";
+    feedback.innerText = "Not quite. Try again.";
+    speakText("Not quite. Try again.");
+    return;
+  }
+
+  if (step.followUp) {
+    state.route.awaitFollowUp = step.followUp;
+
+    if ($("task-desc")) $("task-desc").innerText = step.followUp.desc || "";
+
+    const wrap = $("task-options");
+    if (wrap) {
+      wrap.innerHTML = (step.followUp.options || [])
+        .map(
+          (opt, followIndex) => `
+          <button class="mcq-btn abbey-follow-option" data-follow-index="${followIndex}">
+            ${opt}
+          </button>
+        `
+        )
+        .join("");
+
+      document.querySelectorAll(".abbey-follow-option").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          answerAbbeyRouteStep(Number(btn.dataset.followIndex || -1));
+        });
+      });
+    }
+
+    feedback.style.display = "block";
+    feedback.style.color = "var(--gold)";
+    feedback.innerText = "Good. One more.";
+    speakText(step.followUp.desc || "One more.");
+    saveState();
+    return;
+  }
+
+  resolveAbbeyRouteStep(step);
 }
+
 
 function finishAbbeyRoute() {
   if (!state.route || state.route.type !== "abbey") {
