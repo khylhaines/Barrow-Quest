@@ -1934,7 +1934,7 @@ function runAbbeyRouteStep() {
 
   document.querySelectorAll(".abbey-step-option").forEach((btn) => {
     btn.addEventListener("click", () => {
-      answerAbbeyRouteStep(Number(btn.dataset.stepIndex || -1));
+     answerAbbeyRouteStep(Number(btn.dataset.stepIndex || -1));
     });
   });
 
@@ -1948,11 +1948,81 @@ function runAbbeyRouteStep() {
   speakText(step.story || step.desc || step.title);
 }
 
+function answerAbbeyRouteStep(index) {
+  if (!state.route || state.route.type !== "abbey") return;
+
+  const def = ABBEY_ROUTE_DEFS[state.route.path];
+  const step = def?.steps?.[state.route.step];
+  const feedback = $("task-feedback");
+
+  if (!def || !step || !feedback) return;
+
+  if (state.route.awaitFollowUp) {
+    const follow = state.route.awaitFollowUp;
+    const isCorrect = index === Number(follow.answer);
+
+    if (!isCorrect) {
+      feedback.style.display = "block";
+      feedback.style.color = "#ff6b6b";
+      feedback.innerText = "Not quite. Try again.";
+      speakText("Not quite. Try again.");
+      return;
+    }
+
+    state.route.awaitFollowUp = null;
+    resolveAbbeyRouteStep(step);
+    return;
+  }
+
+  const isCorrect = index === Number(step.answer);
+
+  if (!isCorrect) {
+    feedback.style.display = "block";
+    feedback.style.color = "#ff6b6b";
+    feedback.innerText = "Not quite. Try again.";
+    speakText("Not quite. Try again.");
+    return;
+  }
+
+  if (step.followUp) {
+    state.route.awaitFollowUp = step.followUp;
+
+    if ($("task-desc")) $("task-desc").innerText = step.followUp.desc || "";
+
+    const wrap = $("task-options");
+    if (wrap) {
+      wrap.innerHTML = (step.followUp.options || [])
+        .map(
+          (opt, followIndex) => `
+          <button class="mcq-btn abbey-follow-option" data-follow-index="${followIndex}">
+            ${opt}
+          </button>
+        `
+        )
+        .join("");
+
+      document.querySelectorAll(".abbey-follow-option").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          answerAbbeyRouteStep(Number(btn.dataset.followIndex || -1));
+        });
+      });
+    }
+
+    feedback.style.display = "block";
+    feedback.style.color = "var(--gold)";
+    feedback.innerText = "Good. One more.";
+    speakText(step.followUp.desc || "One more.");
+    saveState();
+    return;
+  }
+
+  resolveAbbeyRouteStep(step);
+}
 
 function resolveAbbeyRouteStep(step) {
   if (!state.route || !step) return;
 
-const feedback = $("task-feedback");
+  const feedback = $("task-feedback");
   const active = getActivePlayer();
   const reward = step.reward || { coins: 20, xp: 10, tokens: 0 };
 
@@ -2221,490 +2291,6 @@ function completeAbbeyCoreReward() {
   );
   saveState();
 }
-
-/* ============================
-   PLAYERS / HUD
-============================ */
-function getEnabledPlayers() {
-  return state.players.filter((p) => p.enabled);
-}
-
-function getActivePlayer() {
-  return (
-    state.players.find((p) => p.id === state.activePlayerId && p.enabled) ||
-    getEnabledPlayers()[0] ||
-    state.players[0]
-  );
-}
-
-function setActivePlayer(id) {
-  const player = state.players.find((p) => p.id === id && p.enabled);
-  if (!player) return;
-  state.activePlayerId = id;
-  saveState();
-  renderHUD();
-  renderShop();
-}
-
-function setPlayerCount(count) {
-  state.players.forEach((p, i) => {
-    p.enabled = i < count;
-  });
-
-  const active = getActivePlayer();
-  state.activePlayerId = active.id;
-  saveState();
-  renderHUD();
-  renderShop();
-}
-
-function updateCoins(playerId, amount) {
-  const player = state.players.find((p) => p.id === playerId);
-  if (!player) return;
-  player.coins = Math.max(0, Number(player.coins || 0) + Number(amount || 0));
-  saveState();
-  renderHUD();
-  renderShop();
-}
-
-function updateTokens(amount) {
-  state.meta.tokens = Math.max(
-    0,
-    Number(state.meta?.tokens || 0) + Number(amount || 0)
-  );
-  saveState();
-  renderHUD();
-}
-
-function renderHUD() {
-  const active = getActivePlayer();
-  const coins = active?.coins || 0;
-  const xp = Number(state.meta?.xp || 0);
-  const level = getLevelFromXP(xp);
-
-  if ($("top-coins")) $("top-coins").innerText = String(coins);
-  if ($("top-xp")) $("top-xp").innerText = `L${level} • ${xp}`;
-
-  const legacyTokens = $("top-tokens");
-  if (legacyTokens) {
-    legacyTokens.parentElement?.classList.add("hidden");
-  }
-
-  const title = document.querySelector(".top-pill");
-  if (title && state.activePack === "classic" && state.mapMode === "abbey") {
-    const abbey = getAbbeyRebuild();
-    title.innerText =
-      abbey.stage > 0
-        ? `LOST ORDER • R${abbey.points}`
-        : "BARROW QUEST";
-  } else if (title) {
-    title.innerText = "BARROW QUEST";
-  }
-}
-
-/* ============================
-   MODALS
-============================ */
-function hideAllModals() {
-  document.querySelectorAll(".full-modal").forEach((el) => {
-    el.style.display = "none";
-  });
-}
-
-function showModal(id) {
-  hideAllModals();
-  const el = $(id);
-  if (el) el.style.display = "block";
-}
-
-function closeModal(id) {
-  const el = $(id);
-  if (el) el.style.display = "none";
-}
-
-/* ============================
-   HELPERS
-============================ */
-function hasValidCoords(pin) {
-  return (
-    Array.isArray(pin?.l) &&
-    pin.l.length === 2 &&
-    Number.isFinite(pin.l[0]) &&
-    Number.isFinite(pin.l[1]) &&
-    !(pin.l[0] === 0 && pin.l[1] === 0)
-  );
-}
-
-function getEffectiveTier() {
-  if (state.activePack === "adult") return "adult";
-  if (state.tierMode === "auto") {
-    return getEnabledPlayers().length <= 1 ? "adult" : "teen";
-  }
-  return state.tierMode || "kid";
-}
-
-function getCurrentQuizProfile() {
-  const tier = getEffectiveTier();
-  const base = state.quizProfiles?.[tier] || getDefaultAdaptiveProfile(tier);
-  return normaliseAdaptiveProfile(base, tier);
-}
-
-function rememberQuestionTags(tags = []) {
-  if (!Array.isArray(tags) || !tags.length) return;
-  const merged = [...(state.recentQuestionTags || []), ...tags.map(String)];
-  state.recentQuestionTags = merged.slice(-20);
-}
-
-function getCurrentPins() {
-  if (state.activePack === "adult") {
-    if (!state.activeAdultCategory) return ADULT_PINS.filter(hasValidCoords);
-    return ADULT_PINS.filter(
-      (p) => p.category === state.activeAdultCategory && hasValidCoords(p)
-    );
-  }
-
-  if (state.mapMode === "park") {
-    return PINS.filter((p) => p.set === "park" && hasValidCoords(p));
-  }
-
-  if (state.mapMode === "abbey") {
-    return PINS.filter((p) => p.set === "abbey" && hasValidCoords(p));
-  }
-
-  return PINS.filter((p) => p.set === "core" && hasValidCoords(p));
-}
-
-function getModeStart() {
-  if (state.activePack === "adult") {
-    const pins = getCurrentPins();
-    if (pins.length) return [pins[0].l[0], pins[0].l[1], 14];
-    return [54.11371, -3.218448, 14];
-  }
-
-  if (state.mapMode === "park") return [54.1174, -3.2168, 16];
-  if (state.mapMode === "abbey") return [54.1344, -3.1964, 15];
-  return [54.11371, -3.218448, 14];
-}
-
-function getClassicWorld(pin) {
-  return String(pin?.set || state.mapMode || "core").toLowerCase();
-}
-
-function getClassicZone(pin) {
-  return String(pin?.zone || pin?.set || state.mapMode || "core").toLowerCase();
-}
-
-function createHeroIcon() {
-  const char = state.settings.character || "hero_duo";
-  const value = CHARACTER_ICONS[char] || "🧭";
-
-  if (value.endsWith(".jpg") || value.endsWith(".png")) {
-    return L.divIcon({
-      className: "marker-logo",
-      html: `
-        <div style="
-          width:52px;
-          height:52px;
-          border-radius:50%;
-          overflow:hidden;
-          border:2px solid #ffd54a;
-          box-shadow:0 4px 12px rgba(0,0,0,0.6);
-          background:#111;
-        ">
-          <img src="${value}" style="width:100%;height:100%;object-fit:cover;">
-        </div>
-      `,
-      iconSize: [52, 52],
-      iconAnchor: [26, 26],
-    });
-  }
-
-  return L.divIcon({
-    className: "marker-logo",
-    html: `<div style="font-size:40px;">${value}</div>`,
-    iconSize: [44, 44],
-    iconAnchor: [22, 22],
-  });
-}
-
-function createPinIcon(pin) {
-  const status = getCaptureStatus(pin);
-  const icon = pin.i || "📍";
-  const abbey = getAbbeyRebuild();
-  const hasGlowPack = getInventoryCount("route_glow_pack") > 0;
-
-  if (status.fullyCaptured) {
-    return L.divIcon({
-      className: "marker-logo",
-      html: `
-        <div style="
-          width:38px;
-          height:38px;
-          border-radius:50%;
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          background:rgba(77,255,158,0.18);
-          border:2px solid #4dff9e;
-          box-shadow:0 0 0 2px rgba(0,0,0,0.35) inset;
-          font-size:20px;
-          line-height:1;
-          ${hasGlowPack ? "filter: drop-shadow(0 0 8px rgba(99,255,211,.7));" : ""}
-        ">✅</div>
-      `,
-      iconSize: [38, 38],
-      iconAnchor: [19, 19],
-    });
-  }
-
-  const abbeyGlow =
-    state.activePack === "classic" &&
-    state.mapMode === "abbey" &&
-    abbey.stage > 0
-      ? `filter: drop-shadow(0 0 ${4 + abbey.stage * 2}px rgba(255,213,74,.35));`
-      : "";
-
-  if (status.completedCount > 0) {
-    return L.divIcon({
-      className: "marker-logo",
-      html: `
-        <div style="position:relative;width:42px;height:42px;display:flex;align-items:center;justify-content:center;${abbeyGlow}">
-          <div style="font-size:28px;line-height:1;">${icon}</div>
-          <div style="
-            position:absolute;
-            right:-4px;
-            bottom:-4px;
-            min-width:20px;
-            height:20px;
-            padding:0 4px;
-            border-radius:999px;
-            background:#ffd54a;
-            color:#111;
-            font-size:11px;
-            font-weight:900;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            border:2px solid #111;
-          ">${status.completedCount}/${status.required}</div>
-        </div>
-      `,
-      iconSize: [42, 42],
-      iconAnchor: [21, 21],
-    });
-  }
-
-  return L.divIcon({
-    className: "marker-logo",
-    html: `<div style="font-size:28px;line-height:1;${abbeyGlow}">${icon}</div>`,
-    iconSize: [34, 34],
-    iconAnchor: [17, 17],
-  });
-}
-
-function getAdultContentForPin(pin) {
-  if (!pin) return null;
-  return ADULT_CONTENT?.[pin.id] || null;
-}
-
-function showQuestLayoutForPack() {
-  const classicWrap = $("classic-mission-wrap");
-  const adultWrap = $("adult-investigation-wrap");
-
-  if (classicWrap) {
-    classicWrap.style.display = state.activePack === "adult" ? "none" : "block";
-  }
-
-  if (adultWrap) {
-    adultWrap.style.display = state.activePack === "adult" ? "block" : "none";
-  }
-}
-
-function normaliseClassicModeFromPin(pin) {
-  if (!pin) return "quiz";
-
-  const type = String(pin.type || "").toLowerCase();
-
-  if (!type || type === "start") return "quiz";
-  if (type === "story") return "history";
-  if (type === "battle") return "activity";
-
-  if (
-    [
-      "quiz",
-      "history",
-      "logic",
-      "activity",
-      "family",
-      "speed",
-      "ghost",
-      "boss",
-      "discovery",
-    ].includes(type)
-  ) {
-    return type;
-  }
-
-  return "quiz";
-}
-
-function getClassicModePoolForPin(pin) {
-  const primary = normaliseClassicModeFromPin(pin);
-  const world = getClassicWorld(pin);
-  const zone = getClassicZone(pin);
-  const unique = [];
-
-  const pushUnique = (value) => {
-    if (!value) return;
-    if (!CLASSIC_MODE_META[value]) return;
-    if (!unique.includes(value)) unique.push(value);
-  };
-
-  const worldPools = {
-    core: ["quiz", "history", "logic", "activity", "family", "speed"],
-    park: ["quiz", "history", "activity", "family", "speed", "logic"],
-    abbey: ["history", "quiz", "logic", "activity", "ghost", "family", "speed"],
-  };
-
-  pushUnique(primary);
-
-  if (primary === "boss") {
-    pushUnique("quiz");
-    pushUnique("history");
-    pushUnique("logic");
-  }
-
-  if (primary === "ghost") {
-    pushUnique("logic");
-    pushUnique("history");
-  }
-
-  if (primary === "discovery") {
-    pushUnique("activity");
-    pushUnique("family");
-  }
-
-  if (zone === "memorial") {
-    pushUnique("history");
-    pushUnique("quiz");
-  }
-
-  if (zone === "abbey") {
-    pushUnique("ghost");
-    pushUnique("logic");
-    pushUnique("history");
-  }
-
-  if (zone === "docks") {
-    pushUnique("history");
-    pushUnique("quiz");
-    pushUnique("logic");
-  }
-
-  if (zone === "nature" || zone === "park") {
-    pushUnique("activity");
-    pushUnique("family");
-    pushUnique("speed");
-  }
-
-  (worldPools[world] || worldPools.core).forEach((mode) => pushUnique(mode));
-
-  if (pin?.hidden) pushUnique("discovery");
-  if (primary === "boss") pushUnique("boss");
-  if (primary === "ghost") pushUnique("ghost");
-
-  return unique.filter(Boolean);
-}
-
-function pickClassicModesForPin(pin, count = 6) {
-  const pool = getClassicModePoolForPin(pin);
-  const primary = normaliseClassicModeFromPin(pin);
-  const selected = [];
-
-  const pushUnique = (value) => {
-    if (!value) return;
-    if (!selected.includes(value)) selected.push(value);
-  };
-
-  pushUnique(primary);
-
-  const remaining = pool.filter((mode) => mode !== primary);
-  const shuffled = [...remaining].sort(() => Math.random() - 0.5);
-
-  shuffled.forEach((mode) => {
-    if (selected.length < count) pushUnique(mode);
-  });
-
-  CLASSIC_MODE_ORDER.forEach((mode) => {
-    if (selected.length < count && pool.includes(mode)) pushUnique(mode);
-  });
-
-  return selected.slice(0, count);
-}
-
-function renderClassicModeChoices(pin) {
-  const tiles = Array.from(document.querySelectorAll(".m-tile"));
-  if (!tiles.length) return;
-
-  const chosenModes = pickClassicModesForPin(pin, 6);
-  const chosenSet = new Set(chosenModes);
-
-  tiles.forEach((tile) => {
-    const mode = tile.dataset.mode;
-    if (!mode) return;
-
-    if (mode === "health" || mode === "battle") {
-      tile.classList.add("hidden");
-      return;
-    }
-
-    if (!chosenSet.has(mode)) {
-      tile.classList.add("hidden");
-      return;
-    }
-
-    tile.classList.remove("hidden");
-
-    const meta = CLASSIC_MODE_META[mode];
-    const done = isModeCompletedForPin(pin, mode);
-    if (meta) {
-      tile.innerHTML = `<span>${done ? "✅" : meta.icon}</span>${meta.label}`;
-      tile.style.opacity = done ? "0.75" : "1";
-    }
-  });
-}
-
-function clearTaskBlocks() {
-  const ids = ["task-block-story", "task-block-evidence", "task-block-clue"];
-
-  ids.forEach((id) => {
-    const el = $(id);
-    if (el) el.classList.add("hidden");
-  });
-
-  if ($("task-story")) $("task-story").innerText = "";
-  if ($("task-evidence")) $("task-evidence").innerText = "";
-  if ($("task-clue")) $("task-clue").innerText = "";
-
-  if ($("btn-read-answers")) {
-    $("btn-read-answers").classList.add("hidden");
-  }
-}
-
-function setTaskBlock(id, bodyId, text) {
-  const block = $(id);
-  const body = $(bodyId);
-  if (!block || !body) return;
-
-  if (text) {
-    body.innerText = text;
-    block.classList.remove("hidden");
-  } else {
-    body.innerText = "";
-    block.classList.add("hidden");
-  }
-}
-
 
 /* ============================
    PLAYERS / HUD
