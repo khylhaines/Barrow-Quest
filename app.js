@@ -1934,21 +1934,20 @@ function runAbbeyRouteStep() {
 
   document.querySelectorAll(".abbey-step-option").forEach((btn) => {
     btn.addEventListener("click", () => {
-      answerAbbeyRouteStep(Number(btn.dataset.followIndex || -1));
-        });
-      });
-    }
+      answerAbbeyRouteStep(Number(btn.dataset.stepIndex || -1));
+    });
+  });
 
-    feedback.style.display = "block";
-    feedback.style.color = "var(--gold)";
-    feedback.innerText = "Good. One more.";
-    speakText(step.followUp.desc || "One more.");
-    saveState();
-    return;
+  if ($("task-feedback")) {
+    $("task-feedback").style.display = "block";
+    $("task-feedback").style.color = "var(--gold)";
+    $("task-feedback").innerText = getAbbeyRouteStatusText();
   }
 
-  resolveAbbeyRouteStep(step);
+  showModal("task-modal");
+  speakText(step.story || step.desc || step.title);
 }
+
 
 function resolveAbbeyRouteStep(step) {
   if (!state.route || !step) return;
@@ -2704,20 +2703,6 @@ function setTaskBlock(id, bodyId, text) {
     body.innerText = "";
     block.classList.add("hidden");
   }
-}
-
-answerAbbeyRouteStep(Number(btn.dataset.stepIndex || -1));
-    });
-  });
-
-  if ($("task-feedback")) {
-    $("task-feedback").style.display = "block";
-    $("task-feedback").style.color = "var(--gold)";
-    $("task-feedback").innerText = getAbbeyRouteStatusText();
-  }
-
-  showModal("task-modal");
-  speakText(step.story || step.desc || step.title);
 }
 
 function answerAbbeyRouteStep(index) {
