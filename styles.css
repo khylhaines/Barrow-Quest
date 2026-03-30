@@ -44,7 +44,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -53,6 +54,13 @@ button {
   border: 0;
 }
 
+textarea {
+  font: inherit;
+}
+
+/* ============================
+   MAP
+============================ */
 #map {
   position: fixed;
   inset: 0;
@@ -99,8 +107,8 @@ button {
   border: 1px solid rgba(255, 213, 74, 0.35);
   background: linear-gradient(
     180deg,
-    rgba(18, 23, 36, 0.95),
-    rgba(10, 14, 24, 0.95)
+    rgba(18, 23, 36, 0.96),
+    rgba(10, 14, 24, 0.96)
   );
   color: var(--gold);
   display: flex;
@@ -110,7 +118,8 @@ button {
   box-shadow: var(--shadow);
   font-weight: 900;
   letter-spacing: 0.08em;
-  text-shadow: 0 0 12px rgba(255, 213, 74, 0.25);
+  text-shadow: 0 0 12px rgba(255, 213, 74, 0.2);
+  white-space: nowrap;
 }
 
 .icon-btn {
@@ -120,7 +129,6 @@ button {
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: linear-gradient(180deg, #1a2235, #0d1422);
   color: #fff;
-  cursor: pointer;
   font-size: 20px;
   box-shadow: var(--shadow);
   transition: transform 0.12s ease, box-shadow 0.12s ease,
@@ -367,7 +375,7 @@ button {
   line-height: 1.45;
 }
 
-.start-card:first-child {
+.start-card:nth-child(1) {
   border-color: rgba(73, 182, 255, 0.32);
   background: linear-gradient(
     180deg,
@@ -385,7 +393,8 @@ button {
   );
 }
 
-.start-card:nth-child(3) {
+.start-card:nth-child(3),
+.start-card:nth-child(4) {
   border-color: rgba(255, 213, 74, 0.24);
   background: linear-gradient(
     180deg,
@@ -394,7 +403,6 @@ button {
   );
 }
 
-/* START SCREEN MONK BACKGROUND */
 #start-modal {
   background:
     linear-gradient(rgba(0, 0, 0, 0.68), rgba(0, 0, 0, 0.82)),
@@ -403,7 +411,6 @@ button {
   background-position: center center;
   background-size: cover;
 }
-
 
 /* ============================
    PILLS
@@ -504,19 +511,25 @@ button {
   text-align: left;
   font-weight: 800;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
-  transition: transform 0.12s ease, border-color 0.12s ease;
+  transition: transform 0.12s ease, border-color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .mcq-btn:hover {
   border-color: rgba(255, 213, 74, 0.35);
+  box-shadow: 0 12px 20px rgba(0, 0, 0, 0.28);
 }
 
 .mcq-btn:active {
   transform: scale(0.99);
 }
 
+.mcq-btn[disabled] {
+  cursor: not-allowed;
+}
+
 /* ============================
-   SETTINGS
+   SETTINGS / FORMS
 ============================ */
 .settings-card + .settings-card,
 .setting-row + .setting-row {
@@ -525,7 +538,8 @@ button {
 
 select,
 input[type="text"],
-input[type="search"] {
+input[type="search"],
+textarea {
   width: 100%;
   min-height: 46px;
   background: #111827;
@@ -534,6 +548,11 @@ input[type="search"] {
   border-radius: 14px;
   padding: 10px 12px;
   outline: none;
+}
+
+textarea {
+  min-height: 96px;
+  resize: vertical;
 }
 
 input[type="range"] {
@@ -625,6 +644,7 @@ input[type="range"] {
   text-align: center;
   max-width: 680px;
   margin: 0 auto 16px;
+  white-space: pre-line;
 }
 
 #task-options {
@@ -670,6 +690,14 @@ input[type="range"] {
   color: white;
   text-align: center;
   box-shadow: var(--shadow);
+  transition: transform 0.12s ease, box-shadow 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.adult-action:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px rgba(0, 0, 0, 0.32);
+  border-color: rgba(255, 213, 74, 0.2);
 }
 
 .adult-action span {
@@ -848,7 +876,9 @@ input[type="range"] {
   margin-top: 14px;
   font-size: 14px;
   color: var(--muted);
-  line-height: 1.45;
+  line-height: 1.55;
+  white-space: pre-line;
+  text-align: center;
 }
 
 /* ============================
@@ -917,6 +947,7 @@ input[type="range"] {
     min-height: 40px;
     padding: 0 10px;
     font-size: 12px;
+    letter-spacing: 0.05em;
   }
 
   .status-stack {
@@ -978,5 +1009,9 @@ input[type="range"] {
 
   #badge-title {
     font-size: 20px;
+  }
+
+  .adult-action-grid {
+    grid-template-columns: 1fr;
   }
 }
