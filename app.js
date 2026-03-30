@@ -2705,52 +2705,6 @@ function setTaskBlock(id, bodyId, text) {
   }
 }
 
-function completeAbbeyCoreReward() {
-  const abbey = getAbbeyRebuild();
-
-  if (!abbey.completedCore) {
-    abbey.completedCore = true;
-    abbey.finished = true;
-    abbey.unlockedCore = true;
-  }
-
-  if (!hasBadge("Abbey Conqueror")) {
-    state.meta.badges.push({
-      name: "Abbey Conqueror",
-      icon: "🏛️",
-      captures: 0,
-      awardedAt: new Date().toISOString(),
-    });
-
-    const popup = $("badge-popup");
-    const icon = $("badge-icon");
-    const title = $("badge-title");
-    const text = $("badge-text");
-
-    if (popup && icon && title && text) {
-      icon.innerText = "🏛️";
-      title.innerText = "ABBEY COMPLETE";
-      text.innerText = "Abbey Conqueror";
-      popup.classList.remove("hidden");
-      setTimeout(() => {
-        popup.classList.add("hidden");
-      }, 3400);
-    }
-  }
-
-  showScriptedRewardImage(
-    "The Lost Order Restored",
-    "The Abbey restored… through your path.\nNew routes and visual rewards await.",
-    "./monk.jpg"
-  );
-
-  saveCaptainNote(
-    "Abbey Core Complete: The Lost Order Restored",
-    "route_summary",
-    "Abbey Core"
-  );
-  saveState();
-}
 
 /* ============================
    PLAYERS / HUD
