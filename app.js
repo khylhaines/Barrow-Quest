@@ -16,9 +16,9 @@ const $ = (id) => document.getElementById(id);
 /* ============================
    STORAGE SYSTEM
 ============================ */
-const SAVE_VERSION = 3;
-const SAVE_KEY = "bq_world_v20_phase3s";
-const BACKUP_KEY = "bq_world_v20_phase3s_backup";
+const SAVE_VERSION = 4;
+const SAVE_KEY = "bq_world_v20_phase4_boss";
+const BACKUP_KEY = "bq_world_v20_phase4_boss_backup";
 const EXPORT_FILENAME = "barrow-quest-save.json";
 
 let autosaveTimer = null;
@@ -160,6 +160,10 @@ function migrateSave(raw) {
     };
   }
 
+  if (!migrated.bossProgress || typeof migrated.bossProgress !== "object") {
+    migrated.bossProgress = {};
+  }
+
   migrated.storage.version = SAVE_VERSION;
   migrated.storage.migratedFrom = version;
   migrated.storage.migratedAt = new Date().toISOString();
@@ -204,6 +208,185 @@ const ABBEY_ROUTE_APPROACH_PIN_IDS = [
   "abbey_church",
   "abbey_boss",
 ];
+
+const BOSS_MODE_PIN_IDS = ["abbey_boss"];
+
+const BOSS_DEFS = {
+  abbey_boss: {
+    id: "abbey_boss",
+    title: "Furness Abbey: The Lost Order Boss Trial",
+    badgeName: "Abbey Archivist",
+    badgeIcon: "👑",
+    rewardImage: "./monk.jpg",
+    rewardCaption:
+      "You solved the Abbey boss trial and restored the final lost sequence.",
+    penalty: {
+      coins: 10,
+      xp: 5,
+    },
+    kids: {
+      autoOrder: true,
+      steps: [
+        {
+          kind: "story",
+          title: "The Abbey Begins",
+          text:
+            "Long ago, Furness Abbey was founded as a place of worship, work, order, and learning. People came here to live by rules, prayer, and daily routine.",
+          reward: { coins: 12, xp: 8 },
+        },
+        {
+          kind: "story",
+          title: "Life Inside the Walls",
+          text:
+            "The monks did not only pray. They worked, farmed, stored knowledge, and kept the Abbey running every day. The place was alive with routine and purpose.",
+          reward: { coins: 12, xp: 8 },
+        },
+        {
+          kind: "puzzle",
+          title: "Boss Puzzle: Right Call in the Right Order",
+          text:
+            "Put these in the right order: Founded first, destroyed later. Then the game will add them together for you.",
+          options: [
+            "1537 then 1127",
+            "1127 then 1537",
+            "1200 then 1400",
+          ],
+          answer: 1,
+          autoSolve: "sum_found_destroyed",
+          autoSolveValue: 2664,
+          successText:
+            "Correct. Founded first, dissolved later. 1127 + 1537 = 2664.",
+          reward: { coins: 30, xp: 18 },
+          routeComplete: true,
+        },
+      ],
+    },
+    teen: {
+      autoOrder: false,
+      steps: [
+        {
+          kind: "story",
+          title: "A Powerful Religious House",
+          text:
+            "Furness Abbey grew into one of the great monastic houses in the region. It was not just a church ruin. It once held wealth, land, structure, labour, and influence.",
+          reward: { coins: 12, xp: 8 },
+        },
+        {
+          kind: "story",
+          title: "Order and Routine",
+          text:
+            "Monastic life depended on discipline. Prayer, labour, silence, movement, and duty all followed pattern. The Abbey functioned because structure held it together.",
+          reward: { coins: 12, xp: 8 },
+        },
+        {
+          kind: "story",
+          title: "A Changing World",
+          text:
+            "What made the Abbey strong also made it vulnerable when royal power turned against the monasteries. The old system could not survive the coming break.",
+          reward: { coins: 12, xp: 8 },
+        },
+        {
+          kind: "puzzle",
+          title: "Step Puzzle 1",
+          text:
+            "What came first in Abbey history?",
+          options: [
+            "Its destruction",
+            "Its founding",
+            "Its rediscovery",
+          ],
+          answer: 1,
+          successText: "Yes. The Abbey had to begin before it could fall.",
+          reward: { coins: 14, xp: 10 },
+        },
+        {
+          kind: "puzzle",
+          title: "Step Puzzle 2",
+          text:
+            "Which number is the foundation year for the Abbey boss trial?",
+          options: ["1127", "1537", "1664"],
+          answer: 0,
+          successText: "Correct. 1127 is the foundation year used here.",
+          reward: { coins: 14, xp: 10 },
+        },
+        {
+          kind: "puzzle",
+          title: "Boss Puzzle: Right Call in the Right Order",
+          text:
+            "Now solve it properly. Enter the numbers in the right order, then add them together.",
+          inputMode: "ordered_sum",
+          expectedOrder: ["1127", "1537"],
+          expectedValue: 2664,
+          successText:
+            "Correct. 1127 first, 1537 second, total 2664.",
+          reward: { coins: 36, xp: 22 },
+          routeComplete: true,
+        },
+      ],
+    },
+    adult: {
+      autoOrder: false,
+      steps: [
+        {
+          kind: "story",
+          title: "Foundation",
+          text:
+            "Furness Abbey was founded in 1127, in an age when monasteries were not passive relics but engines of belief, administration, labour, landholding, and control. The Abbey was a working institution, not merely a sacred shell.",
+          reward: { coins: 14, xp: 10 },
+        },
+        {
+          kind: "story",
+          title: "Power and Routine",
+          text:
+            "Inside its walls, routine created power. Prayer ordered the day, but so did labour, storage, supply, discipline, and obedience. The Abbey shaped land, people, and movement. Knowledge survived because a system carried it.",
+          reward: { coins: 14, xp: 10 },
+        },
+        {
+          kind: "story",
+          title: "Wealth, Authority, and Vulnerability",
+          text:
+            "Like many major religious houses, Furness Abbey accumulated influence as well as devotion. That strength became a weakness when the Crown moved against monasteries. What had once appeared permanent could be dismantled by force of policy and power.",
+          reward: { coins: 14, xp: 10 },
+        },
+        {
+          kind: "story",
+          title: "Dissolution",
+          text:
+            "In 1537, during the Dissolution of the Monasteries, the Abbey’s institutional life was broken. Stone remained, but the living order behind it was cut apart. What survived afterward was ruin, memory, and fragments.",
+          reward: { coins: 14, xp: 10 },
+        },
+        {
+          kind: "puzzle",
+          title: "Boss Step 1: Chronology",
+          text:
+            "Choose the correct chronological order.",
+          options: [
+            "1537 then 1127",
+            "1127 then 1537",
+            "1127 then 1664",
+          ],
+          answer: 1,
+          successText:
+            "Correct. Foundation first. Dissolution later.",
+          reward: { coins: 16, xp: 12 },
+        },
+        {
+          kind: "puzzle",
+          title: "Boss Step 2: Final Sum",
+          text:
+            "Now enter the ordered years and give the final total. This is the right call in the right order.",
+          inputMode: "ordered_sum",
+          expectedOrder: ["1127", "1537"],
+          expectedValue: 2664,
+          successText:
+            "Correct. 1127 + 1537 = 2664. You restored the final sequence.",
+          reward: { coins: 42, xp: 28 },
+          routeComplete: true,
+        },
+      ],
+    },
+  },
+};
 
 /* ============================
    DEFAULT STATE
@@ -286,6 +469,8 @@ const DEFAULT_STATE = {
       finished: false,
     },
   },
+
+  bossProgress: {},
 };
 
 const SHOP_ITEMS = [
@@ -708,6 +893,33 @@ function normaliseRebuild(rebuild = {}) {
   };
 }
 
+function normaliseBossProgress(progress = {}) {
+  const out = {};
+  Object.entries(progress || {}).forEach(([key, value]) => {
+    const safe = value && typeof value === "object" ? value : {};
+    out[key] = {
+      startedAt: safe.startedAt || null,
+      completedAt: safe.completedAt || null,
+      currentStep: Number.isFinite(safe.currentStep) ? safe.currentStep : 0,
+      failedAttempts: Number.isFinite(safe.failedAttempts)
+        ? safe.failedAttempts
+        : 0,
+      wrongAnswers: Number.isFinite(safe.wrongAnswers)
+        ? safe.wrongAnswers
+        : 0,
+      solved: !!safe.solved,
+      unlocked: !!safe.unlocked,
+      notes: Array.isArray(safe.notes) ? safe.notes : [],
+      enteredOrder: Array.isArray(safe.enteredOrder) ? safe.enteredOrder : [],
+      finalAnswer:
+        safe.finalAnswer === null || safe.finalAnswer === undefined
+          ? ""
+          : String(safe.finalAnswer),
+    };
+  });
+  return out;
+}
+
 function normaliseStorage(storage = {}) {
   return {
     ...computeStorageHealth(),
@@ -795,6 +1007,7 @@ function normaliseLoadedState(parsed) {
     adultLock: normaliseAdultLock(safe.adultLock || {}),
     route: normaliseRoute(safe.route || null),
     rebuild: normaliseRebuild(safe.rebuild || {}),
+    bossProgress: normaliseBossProgress(safe.bossProgress || {}),
   };
 }
 
@@ -1438,6 +1651,525 @@ function getCurrentModeProgress() {
 }
 
 /* ============================
+   BOSS SYSTEM
+============================ */
+function getBossDef(pinId) {
+  return BOSS_DEFS[pinId] || null;
+}
+
+function ensureBossProgressStore() {
+  if (!state.bossProgress || typeof state.bossProgress !== "object") {
+    state.bossProgress = {};
+  }
+  return state.bossProgress;
+}
+
+function getBossProgress(pinId) {
+  const store = ensureBossProgressStore();
+  if (!store[pinId]) {
+    store[pinId] = {
+      startedAt: null,
+      completedAt: null,
+      currentStep: 0,
+      failedAttempts: 0,
+      wrongAnswers: 0,
+      solved: false,
+      unlocked: false,
+      notes: [],
+      enteredOrder: [],
+      finalAnswer: "",
+    };
+  }
+  return store[pinId];
+}
+
+function resetBossProgress(pinId) {
+  const store = ensureBossProgressStore();
+  store[pinId] = {
+    startedAt: new Date().toISOString(),
+    completedAt: null,
+    currentStep: 0,
+    failedAttempts: 0,
+    wrongAnswers: 0,
+    solved: false,
+    unlocked: true,
+    notes: [],
+    enteredOrder: [],
+    finalAnswer: "",
+  };
+  return store[pinId];
+}
+
+function getBossTierKey() {
+  const tier = getEffectiveTier();
+  if (tier === "kid") return "kids";
+  if (tier === "teen") return "teen";
+  return "adult";
+}
+
+function getBossTierSteps(pinId) {
+  const def = getBossDef(pinId);
+  if (!def) return [];
+  const tierKey = getBossTierKey();
+  return Array.isArray(def?.[tierKey]?.steps) ? def[tierKey].steps : [];
+}
+
+function getBossPenalty(def) {
+  return def?.penalty || { coins: 10, xp: 5 };
+}
+
+function isBossPin(pin) {
+  return !!pin?.id && BOSS_MODE_PIN_IDS.includes(pin.id);
+}
+
+function getBossUnlockSummary(pinId) {
+  const progress = getBossProgress(pinId);
+  return [
+    `Boss Step: ${Number(progress.currentStep || 0) + 1}`,
+    `Wrong Answers: ${Number(progress.wrongAnswers || 0)}`,
+    `Failed Attempts: ${Number(progress.failedAttempts || 0)}`,
+    progress.solved ? "Solved: YES" : "Solved: NO",
+  ].join("\n");
+}
+
+function showBossProgressBox(pinId) {
+  const el = $("boss-progress");
+  if (!el) return;
+  el.style.display = "block";
+  el.innerText = getBossUnlockSummary(pinId);
+}
+
+function hideBossProgressBox() {
+  const el = $("boss-progress");
+  if (!el) return;
+  el.style.display = "none";
+  el.innerText = "";
+}
+
+function setBossSummaryBlock(text = "") {
+  const block = $("task-block-boss");
+  const body = $("task-boss-summary");
+  if (!block || !body) return;
+
+  if (text) {
+    block.classList.remove("hidden");
+    body.innerText = text;
+  } else {
+    block.classList.add("hidden");
+    body.innerText = "";
+  }
+}
+
+function awardBossBadge(def) {
+  if (!def?.badgeName || hasBadge(def.badgeName)) return false;
+
+  state.meta.badges.push({
+    name: def.badgeName,
+    icon: def.badgeIcon || "👑",
+    captures: 0,
+    awardedAt: new Date().toISOString(),
+  });
+
+  showBadgePopup({
+    name: def.badgeName,
+    icon: def.badgeIcon || "👑",
+    captures: 0,
+  });
+
+  return true;
+}
+
+function applyBossPenalty(def) {
+  const penalty = getBossPenalty(def);
+  const active = getActivePlayer();
+
+  if (active && penalty.coins) {
+    updateCoins(active.id, -Math.abs(Number(penalty.coins || 0)));
+  }
+
+  state.meta.xp = Math.max(
+    0,
+    Number(state.meta.xp || 0) - Math.abs(Number(penalty.xp || 0))
+  );
+}
+
+function completeBossStepReward(step) {
+  const active = getActivePlayer();
+  const reward = step?.reward || { coins: 0, xp: 0 };
+
+  if (active && reward.coins) {
+    updateCoins(active.id, Number(reward.coins || 0));
+  }
+
+  state.meta.xp = Number(state.meta.xp || 0) + Number(reward.xp || 0);
+}
+
+function openBossMission(pin) {
+  const def = getBossDef(pin?.id);
+  if (!def) {
+    alert("No boss file found for this pin yet.");
+    return;
+  }
+
+  const progress = resetBossProgress(pin.id);
+  const tierKey = getBossTierKey();
+  const tierDef = def[tierKey];
+  const steps = Array.isArray(tierDef?.steps) ? tierDef.steps : [];
+
+  currentTask = {
+    mode: "boss",
+    pin,
+    question: null,
+    boss: {
+      pinId: pin.id,
+      tier: tierKey,
+      stepIndex: Number(progress.currentStep || 0),
+      steps,
+      def,
+    },
+  };
+
+  if ($("task-title")) $("task-title").innerText = def.title;
+  if ($("task-desc")) {
+    $("task-desc").innerText =
+      tierKey === "kids"
+        ? "Final Abbey trial. Listen, learn, then solve the last order puzzle."
+        : tierKey === "teen"
+        ? "Final Abbey trial. Follow the history, then solve the chronology and sum."
+        : "Final Abbey trial. Recover the full sequence, then solve the ordered sum.";
+  }
+
+  clearTaskBlocks();
+  setBossSummaryBlock(
+    `BOSS ACTIVE\n${pin.n}\n${tierKey.toUpperCase()} TIER\n\nPenalty on wrong answer: -${def.penalty.coins} coins, -${def.penalty.xp} XP`
+  );
+  showBossProgressBox(pin.id);
+
+  const feedback = $("task-feedback");
+  if (feedback) {
+    feedback.style.display = "none";
+    feedback.innerText = "";
+  }
+
+  runBossStep();
+  showModal("task-modal");
+}
+
+function runBossStep() {
+  if (!currentTask?.boss) return;
+
+  const { pinId, steps, stepIndex } = currentTask.boss;
+  const step = steps[stepIndex];
+
+  if (!step) {
+    finishBossMission();
+    return;
+  }
+
+  const progress = getBossProgress(pinId);
+  progress.currentStep = stepIndex;
+
+  if ($("task-title")) $("task-title").innerText = step.title || "Boss Step";
+  if ($("task-desc")) $("task-desc").innerText = step.text || "";
+
+  clearTaskBlocks();
+  setBossSummaryBlock(
+    `BOSS FILE\n${getBossDef(pinId)?.title || "Boss Trial"}\n\nStep ${stepIndex + 1} of ${steps.length}`
+  );
+
+  if (step.kind === "story") {
+    setTaskBlock("task-block-story", "task-story", step.text || "");
+  }
+
+  showBossProgressBox(pinId);
+  renderBossStepOptions(step);
+  speakText(step.text || step.title || "Boss step.");
+  saveState();
+}
+
+function renderBossStepOptions(step) {
+  const wrap = $("task-options");
+  const readBtn = $("btn-read-answers");
+  if (!wrap) return;
+
+  wrap.innerHTML = "";
+  wrap.style.display = "grid";
+
+  if (readBtn) {
+    if (Array.isArray(step?.options) && step.options.length) {
+      readBtn.classList.remove("hidden");
+    } else {
+      readBtn.classList.add("hidden");
+    }
+  }
+
+  if (step.kind === "story") {
+    const btn = document.createElement("button");
+    btn.className = "mcq-btn";
+    btn.innerText = "CONTINUE";
+    btn.addEventListener("click", () => {
+      handleBossStoryAdvance(step);
+    });
+    wrap.appendChild(btn);
+    return;
+  }
+
+  if (step.autoSolve === "sum_found_destroyed") {
+    const btn = document.createElement("button");
+    btn.className = "mcq-btn";
+    btn.innerText = "AUTO SOLVE FOR KIDS";
+    btn.addEventListener("click", () => {
+      handleBossAutoSolve(step);
+    });
+    wrap.appendChild(btn);
+  }
+
+  if (Array.isArray(step?.options) && step.options.length) {
+    step.options.forEach((option, index) => {
+      const btn = document.createElement("button");
+      btn.className = "mcq-btn";
+      btn.innerText = option;
+      btn.addEventListener("click", () => {
+        answerBossOption(index);
+      });
+      wrap.appendChild(btn);
+    });
+    return;
+  }
+
+  if (step.inputMode === "ordered_sum") {
+    wrap.innerHTML = `
+      <input
+        id="boss-order-input"
+        type="text"
+        placeholder="Enter years in order, e.g. 1127,1537"
+        style="
+          width:100%;
+          background:#111827;
+          color:#fff;
+          border:1px solid rgba(255,255,255,0.1);
+          border-radius:12px;
+          padding:12px;
+          font-size:16px;
+        "
+      />
+      <input
+        id="boss-total-input"
+        type="number"
+        placeholder="Enter total"
+        style="
+          width:100%;
+          background:#111827;
+          color:#fff;
+          border:1px solid rgba(255,255,255,0.1);
+          border-radius:12px;
+          padding:12px;
+          font-size:16px;
+        "
+      />
+      <button class="mcq-btn" id="boss-submit-btn">SUBMIT ANSWER</button>
+    `;
+
+    $("boss-submit-btn")?.addEventListener("click", () => {
+      answerBossOrderedSum();
+    });
+    return;
+  }
+
+  const fallbackBtn = document.createElement("button");
+  fallbackBtn.className = "mcq-btn";
+  fallbackBtn.innerText = "CONTINUE";
+  fallbackBtn.addEventListener("click", () => {
+    handleBossStoryAdvance(step);
+  });
+  wrap.appendChild(fallbackBtn);
+}
+
+function handleBossStoryAdvance(step) {
+  if (!currentTask?.boss) return;
+
+  completeBossStepReward(step);
+  currentTask.boss.stepIndex += 1;
+  saveState();
+  renderHUD();
+  runBossStep();
+}
+
+function handleBossAutoSolve(step) {
+  if (!currentTask?.boss) return;
+
+  const feedback = $("task-feedback");
+  if (feedback) {
+    feedback.style.display = "block";
+    feedback.style.color = "var(--neon)";
+    feedback.innerText = step.successText || "Solved.";
+  }
+
+  completeBossStepReward(step);
+  currentTask.boss.stepIndex += 1;
+  saveState();
+  renderHUD();
+  setTimeout(() => runBossStep(), 500);
+}
+
+function answerBossOption(index) {
+  if (!currentTask?.boss) return;
+
+  const { pinId, steps, stepIndex, def } = currentTask.boss;
+  const step = steps[stepIndex];
+  const feedback = $("task-feedback");
+  const progress = getBossProgress(pinId);
+
+  if (!step || !feedback) return;
+
+  const correct = Number(index) === Number(step.answer);
+
+  if (!correct) {
+    progress.wrongAnswers = Number(progress.wrongAnswers || 0) + 1;
+    progress.failedAttempts = Number(progress.failedAttempts || 0) + 1;
+    applyBossPenalty(def);
+    saveState();
+    renderHUD();
+    showBossProgressBox(pinId);
+
+    feedback.style.display = "block";
+    feedback.style.color = "#ff6b6b";
+    feedback.innerText = `Wrong answer.\nPenalty: -${def.penalty.coins} coins, -${def.penalty.xp} XP`;
+    speakText("Wrong answer. Penalty applied.");
+    return;
+  }
+
+  completeBossStepReward(step);
+  feedback.style.display = "block";
+  feedback.style.color = "var(--neon)";
+  feedback.innerText = step.successText || "Correct.";
+  speakText(step.successText || "Correct.");
+
+  currentTask.boss.stepIndex += 1;
+  saveState();
+  renderHUD();
+  showBossProgressBox(pinId);
+
+  setTimeout(() => runBossStep(), 650);
+}
+
+function answerBossOrderedSum() {
+  if (!currentTask?.boss) return;
+
+  const { pinId, steps, stepIndex, def } = currentTask.boss;
+  const step = steps[stepIndex];
+  const feedback = $("task-feedback");
+  const progress = getBossProgress(pinId);
+
+  if (!step || !feedback) return;
+
+  const rawOrder = String($("boss-order-input")?.value || "").trim();
+  const rawTotal = String($("boss-total-input")?.value || "").trim();
+
+  const normalisedOrder = rawOrder
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  const expectedOrder = Array.isArray(step.expectedOrder)
+    ? step.expectedOrder
+    : [];
+  const correctOrder =
+    normalisedOrder.length === expectedOrder.length &&
+    normalisedOrder.every((value, index) => value === expectedOrder[index]);
+
+  const correctTotal = String(step.expectedValue) === rawTotal;
+
+  progress.enteredOrder = normalisedOrder;
+  progress.finalAnswer = rawTotal;
+
+  if (!correctOrder || !correctTotal) {
+    progress.wrongAnswers = Number(progress.wrongAnswers || 0) + 1;
+    progress.failedAttempts = Number(progress.failedAttempts || 0) + 1;
+    applyBossPenalty(def);
+    saveState();
+    renderHUD();
+    showBossProgressBox(pinId);
+
+    feedback.style.display = "block";
+    feedback.style.color = "#ff6b6b";
+    feedback.innerText =
+      `Wrong final sequence.\nPenalty: -${def.penalty.coins} coins, -${def.penalty.xp} XP`;
+    speakText("Wrong final sequence. Penalty applied.");
+    return;
+  }
+
+  completeBossStepReward(step);
+  feedback.style.display = "block";
+  feedback.style.color = "var(--neon)";
+  feedback.innerText = step.successText || "Boss puzzle solved.";
+  speakText(step.successText || "Boss puzzle solved.");
+
+  currentTask.boss.stepIndex += 1;
+  saveState();
+  renderHUD();
+  showBossProgressBox(pinId);
+
+  setTimeout(() => runBossStep(), 700);
+}
+
+function finishBossMission() {
+  if (!currentTask?.boss) return;
+
+  const { pinId, def } = currentTask.boss;
+  const progress = getBossProgress(pinId);
+  progress.solved = true;
+  progress.completedAt = new Date().toISOString();
+
+  const pin = currentTask.pin;
+  const active = getActivePlayer();
+  const bonus = { coins: 60, xp: 40, tokens: 1 };
+
+  if (active) {
+    updateCoins(active.id, bonus.coins);
+  }
+
+  state.meta.xp = Number(state.meta.xp || 0) + bonus.xp;
+  state.meta.tokens = Number(state.meta.tokens || 0) + bonus.tokens;
+
+  recordMissionCompletion(
+    pin,
+    "boss",
+    bonus,
+    `${pinId}_boss_complete`
+  );
+
+  awardBossBadge(def);
+  checkBadgeUnlocksByCaptures();
+  saveCaptainNote(
+    `${def.title}\nSolved at ${new Date().toLocaleString()}\nFinal answer: ${progress.finalAnswer || "completed"}`,
+    "boss",
+    def.title
+  );
+
+  saveState();
+  renderHUD();
+  renderHomeLog();
+  renderShop();
+  refreshPinMarker(pin);
+  showBossProgressBox(pinId);
+
+  const feedback = $("task-feedback");
+  if (feedback) {
+    feedback.style.display = "block";
+    feedback.style.color = "var(--neon)";
+    feedback.innerText =
+      `BOSS COMPLETE\n+${bonus.coins} coins\n+${bonus.xp} XP\n+${bonus.tokens} token\n\n${def.badgeName} unlocked`;
+  }
+
+  showScriptedRewardImage(
+    def.title,
+    def.rewardCaption,
+    def.rewardImage || "./monk.jpg"
+  );
+}
+
+/* ============================
    ABBEY ROUTE / REBUILD SYSTEM
 ============================ */
 function getAbbeyRebuild() {
@@ -1587,6 +2319,9 @@ function renderAbbeyRouteChoice() {
   }
 
   clearTaskBlocks();
+  setBossSummaryBlock("");
+  hideBossProgressBox();
+
   setTaskBlock(
     "task-block-story",
     "task-story",
@@ -1681,6 +2416,8 @@ function openAbbeyRouteIntro(pathId) {
   }
 
   clearTaskBlocks();
+  setBossSummaryBlock("");
+  hideBossProgressBox();
   setTaskBlock("task-block-story", "task-story", def.intro || "");
 
   const wrap = $("task-options");
@@ -1748,6 +2485,8 @@ function runAbbeyRouteStep() {
   if ($("task-desc")) $("task-desc").innerText = step.desc || "";
 
   clearTaskBlocks();
+  setBossSummaryBlock("");
+  hideBossProgressBox();
   setTaskBlock("task-block-story", "task-story", step.story || "");
   setTaskBlock("task-block-evidence", "task-evidence", "");
   setTaskBlock("task-block-clue", "task-clue", "");
@@ -1996,6 +2735,8 @@ function finishAbbeyRoute() {
   }
 
   clearTaskBlocks();
+  setBossSummaryBlock("");
+  hideBossProgressBox();
   setTaskBlock(
     "task-block-story",
     "task-story",
@@ -2080,7 +2821,7 @@ function completeAbbeyCoreReward() {
 
     if (popup && icon && title && text) {
       icon.innerText = "🏛️";
-      title.innerText = "ABBey COMPLETE";
+      title.innerText = "ABBEY COMPLETE";
       text.innerText = "Abbey Conqueror";
       popup.classList.remove("hidden");
       setTimeout(() => {
@@ -2435,7 +3176,7 @@ function getClassicModePoolForPin(pin) {
   const worldPools = {
     core: ["quiz", "history", "logic", "activity", "family", "speed"],
     park: ["quiz", "history", "activity", "family", "speed", "logic"],
-    abbey: ["history", "quiz", "logic", "activity", "ghost", "family", "speed"],
+    abbey: ["history", "quiz", "logic", "activity", "ghost", "family", "speed", "boss"],
   };
 
   pushUnique(primary);
@@ -2465,6 +3206,7 @@ function getClassicModePoolForPin(pin) {
     pushUnique("ghost");
     pushUnique("logic");
     pushUnique("history");
+    if (isBossPin(pin)) pushUnique("boss");
   }
 
   if (zone === "docks") {
@@ -2518,7 +3260,7 @@ function renderClassicModeChoices(pin) {
   const tiles = Array.from(document.querySelectorAll(".m-tile"));
   if (!tiles.length) return;
 
-  const chosenModes = pickClassicModesForPin(pin, 6);
+  const chosenModes = pickClassicModesForPin(pin, 7);
   const chosenSet = new Set(chosenModes);
 
   tiles.forEach((tile) => {
@@ -2547,7 +3289,12 @@ function renderClassicModeChoices(pin) {
 }
 
 function clearTaskBlocks() {
-  const ids = ["task-block-story", "task-block-evidence", "task-block-clue"];
+  const ids = [
+    "task-block-story",
+    "task-block-evidence",
+    "task-block-clue",
+    "task-block-boss",
+  ];
 
   ids.forEach((id) => {
     const el = $(id);
@@ -2557,6 +3304,7 @@ function clearTaskBlocks() {
   if ($("task-story")) $("task-story").innerText = "";
   if ($("task-evidence")) $("task-evidence").innerText = "";
   if ($("task-clue")) $("task-clue").innerText = "";
+  if ($("task-boss-summary")) $("task-boss-summary").innerText = "";
 
   if ($("btn-read-answers")) {
     $("btn-read-answers").classList.add("hidden");
@@ -2803,16 +3551,17 @@ function openMissionMenu() {
   }
 
   if ($("boss-banner")) {
-    const isBoss = currentPin.type === "boss";
+    const isBoss = currentPin.type === "boss" || isBossPin(currentPin);
     const abbeyCoreOpen =
       state.activePack === "classic" &&
       state.mapMode === "abbey" &&
       getAbbeyRebuild().unlockedCore;
+
     $("boss-banner").style.display = isBoss || abbeyCoreOpen ? "block" : "none";
     $("boss-banner").innerText = isBoss
       ? "FINAL TRIAL ACTIVE"
       : abbeyCoreOpen
-      ? "ABBey CORE READY"
+      ? "ABBEY CORE READY"
       : "";
   }
 
@@ -2846,10 +3595,18 @@ function openTask(mode) {
     return;
   }
 
+  if (mode === "boss" && isBossPin(currentPin)) {
+    closeModal("quest-modal");
+    openBossMission(currentPin);
+    return;
+  }
+
   const tier = getEffectiveTier();
   let task = null;
 
   clearTaskBlocks();
+  setBossSummaryBlock("");
+  hideBossProgressBox();
 
   if (state.activePack === "adult") {
     const content = getAdultContentForPin(currentPin);
@@ -3144,7 +3901,9 @@ function renderShop() {
           <div style="border:1px solid #333;border-radius:14px;padding:12px;background:#111;margin-bottom:10px;">
             <div style="font-weight:bold;">${badge.icon} ${badge.name}</div>
             <div style="font-size:12px;opacity:.82;margin-top:6px;">${
-              badge.captures ? `${badge.captures} node${badge.captures === 1 ? "" : "s"}` : "special unlock"
+              badge.captures
+                ? `${badge.captures} node${badge.captures === 1 ? "" : "s"}`
+                : "special unlock"
             }</div>
           </div>
         `
@@ -3517,6 +4276,9 @@ function renderHomeLog() {
   const abbey = getAbbeyRebuild();
   const route = state.route;
   const noteCount = Array.isArray(state.captainNotes) ? state.captainNotes.length : 0;
+  const bossSolvedCount = Object.values(state.bossProgress || {}).filter(
+    (x) => x?.solved
+  ).length;
 
   summary.innerHTML = `
     <div style="padding:12px;border:1px solid #444;border-radius:14px;background:#111;line-height:1.6;">
@@ -3543,13 +4305,14 @@ function renderHomeLog() {
       <div><strong>MYSTERIES UNLOCKED:</strong> ${mysteryCount}</div>
       <div><strong>COMPLETED PROMPTS TRACKED:</strong> ${completedCount}</div>
       <div><strong>CAPTAIN NOTES:</strong> ${noteCount}</div>
-      <div><strong>ABBey REBUILD:</strong> ${abbey.points} (Stage ${abbey.stage})</div>
-      <div><strong>ABBey ROUTES COMPLETE:</strong> ${
+      <div><strong>ABBEY REBUILD:</strong> ${abbey.points} (Stage ${abbey.stage})</div>
+      <div><strong>ABBEY ROUTES COMPLETE:</strong> ${
         abbey.completedRoutes.length ? abbey.completedRoutes.join(", ") : "none"
       }</div>
       <div><strong>ACTIVE ROUTE:</strong> ${
         route?.path ? `${route.path} step ${Number(route.step || 0) + 1}` : "none"
       }</div>
+      <div><strong>BOSS TRIALS SOLVED:</strong> ${bossSolvedCount}</div>
     </div>
   `;
 
@@ -3601,10 +4364,29 @@ function renderHomeLog() {
   `
       : "";
 
+  const bossBlock = Object.keys(state.bossProgress || {}).length
+    ? `
+      <div style="padding:10px;border:1px solid #444;border-radius:12px;margin:8px 0 14px;background:#161616;">
+        <div style="font-weight:bold;color:var(--gold);">BOSS FILES</div>
+        <div style="margin-top:8px;font-size:13px;line-height:1.6;">
+          ${Object.entries(state.bossProgress)
+            .map(
+              ([key, value]) =>
+                `${key} — ${value?.solved ? "SOLVED" : "IN PROGRESS"} • wrong ${Number(
+                  value?.wrongAnswers || 0
+                )}`
+            )
+            .join("<br>")}
+        </div>
+      </div>
+    `
+    : "";
+
   list.innerHTML =
     mysteryBlock +
     badgeBlock +
     clueBlock +
+    bossBlock +
     pins
       .slice(0, 50)
       .map((pin) => {
@@ -3624,7 +4406,7 @@ function renderHomeLog() {
               status.mustInclude.length
                 ? ` • required: ${status.mustInclude.join(", ")}`
                 : ""
-            }
+            }${isBossPin(pin) ? " • boss trial" : ""}
           </div>
         </div>
       `;
@@ -3812,6 +4594,15 @@ function wireButtons() {
   );
 
   $("btn-read-answers")?.addEventListener("click", () => {
+    if (currentTask?.mode === "boss") {
+      const step =
+        currentTask?.boss?.steps?.[Number(currentTask?.boss?.stepIndex || 0)];
+      if (step?.options?.length) {
+        speakOptions(step.options);
+      }
+      return;
+    }
+
     if (currentTask?.question?.options?.length) {
       speakOptions(currentTask.question.options);
     }
