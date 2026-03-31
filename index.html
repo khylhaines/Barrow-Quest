@@ -447,6 +447,7 @@
           <div class="m-tile" data-mode="activity"><span>🎯</span>ACTIVITY</div>
           <div class="m-tile" data-mode="family"><span>👨‍👩‍👧</span>FAMILY</div>
           <div class="m-tile" data-mode="speed"><span>⚡</span>SPEED</div>
+          <div class="m-tile" data-mode="boss"><span>👑</span>BOSS</div>
         </div>
       </div>
 
@@ -511,6 +512,27 @@
           <div class="case-label">CLUE</div>
           <div id="task-clue" class="case-body"></div>
         </div>
+
+        <div id="task-block-boss" class="case-block hidden">
+          <div class="case-label">BOSS FILE</div>
+          <div id="task-boss-summary" class="case-body"></div>
+        </div>
+
+        <div
+          id="boss-progress"
+          style="
+            margin-top: 12px;
+            padding: 12px;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 213, 74, 0.25);
+            background: rgba(255, 213, 74, 0.08);
+            color: #ffe8a3;
+            font-size: 12px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            display: none;
+          "
+        ></div>
 
         <p id="task-desc" style="font-size: 1.1rem; font-weight: bold"></p>
 
